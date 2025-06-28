@@ -1,0 +1,9 @@
+-- Add up migration script here
+CREATE TABLE accounts (
+    connect_id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    balance BIGINT NOT NULL DEFAULT 0,
+    points BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+);

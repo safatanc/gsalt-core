@@ -1,20 +1,20 @@
 package services
 
 import (
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/models"
+	"github.com/safatanc/gsalt-core/internal/infrastructures"
 	"gorm.io/gorm"
 )
 
 type AccountService struct {
 	db             *gorm.DB
-	validator      *validator.Validate
+	validator      *infrastructures.Validator
 	connectService *ConnectService
 }
 
-func NewAccountService(db *gorm.DB, validator *validator.Validate, connectService *ConnectService) *AccountService {
+func NewAccountService(db *gorm.DB, validator *infrastructures.Validator, connectService *ConnectService) *AccountService {
 	return &AccountService{
 		db:             db,
 		validator:      validator,
@@ -85,7 +85,7 @@ func (s *AccountService) GetAccountByToken(accessToken string) (*models.Account,
 }
 
 func (s *AccountService) UpdateAccount(connectId string, req *models.AccountUpdateDto) (*models.Account, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 

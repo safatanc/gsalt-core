@@ -3,19 +3,19 @@ package services
 import (
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/models"
+	"github.com/safatanc/gsalt-core/internal/infrastructures"
 	"gorm.io/gorm"
 )
 
 type VoucherService struct {
 	db        *gorm.DB
-	validator *validator.Validate
+	validator *infrastructures.Validator
 }
 
-func NewVoucherService(db *gorm.DB, validator *validator.Validate) *VoucherService {
+func NewVoucherService(db *gorm.DB, validator *infrastructures.Validator) *VoucherService {
 	return &VoucherService{
 		db:        db,
 		validator: validator,
@@ -23,7 +23,7 @@ func NewVoucherService(db *gorm.DB, validator *validator.Validate) *VoucherServi
 }
 
 func (s *VoucherService) CreateVoucher(req *models.VoucherCreateDto) (*models.Voucher, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 
@@ -123,7 +123,7 @@ func (s *VoucherService) GetVouchers(limit, offset int, status *models.VoucherSt
 }
 
 func (s *VoucherService) UpdateVoucher(voucherId string, req *models.VoucherUpdateDto) (*models.Voucher, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 

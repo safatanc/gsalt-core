@@ -1,21 +1,21 @@
 package services
 
 import (
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/models"
+	"github.com/safatanc/gsalt-core/internal/infrastructures"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type TransactionService struct {
 	db             *gorm.DB
-	validator      *validator.Validate
+	validator      *infrastructures.Validator
 	accountService *AccountService
 }
 
-func NewTransactionService(db *gorm.DB, validator *validator.Validate, accountService *AccountService) *TransactionService {
+func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService) *TransactionService {
 	return &TransactionService{
 		db:             db,
 		validator:      validator,
@@ -24,7 +24,7 @@ func NewTransactionService(db *gorm.DB, validator *validator.Validate, accountSe
 }
 
 func (s *TransactionService) CreateTransaction(req *models.TransactionCreateDto) (*models.Transaction, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 
@@ -128,7 +128,7 @@ func (s *TransactionService) GetTransactionsByAccount(accountId string, limit, o
 }
 
 func (s *TransactionService) UpdateTransaction(transactionId string, req *models.TransactionUpdateDto) (*models.Transaction, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 

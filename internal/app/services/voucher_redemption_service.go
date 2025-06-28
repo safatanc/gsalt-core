@@ -1,23 +1,23 @@
 package services
 
 import (
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/models"
+	"github.com/safatanc/gsalt-core/internal/infrastructures"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type VoucherRedemptionService struct {
 	db                 *gorm.DB
-	validator          *validator.Validate
+	validator          *infrastructures.Validator
 	voucherService     *VoucherService
 	accountService     *AccountService
 	transactionService *TransactionService
 }
 
-func NewVoucherRedemptionService(db *gorm.DB, validator *validator.Validate, voucherService *VoucherService, accountService *AccountService, transactionService *TransactionService) *VoucherRedemptionService {
+func NewVoucherRedemptionService(db *gorm.DB, validator *infrastructures.Validator, voucherService *VoucherService, accountService *AccountService, transactionService *TransactionService) *VoucherRedemptionService {
 	return &VoucherRedemptionService{
 		db:                 db,
 		validator:          validator,
@@ -28,7 +28,7 @@ func NewVoucherRedemptionService(db *gorm.DB, validator *validator.Validate, vou
 }
 
 func (s *VoucherRedemptionService) CreateRedemption(req *models.VoucherRedemptionCreateDto) (*models.VoucherRedemption, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 
@@ -139,7 +139,7 @@ func (s *VoucherRedemptionService) GetRedemptionsByVoucher(voucherId string, lim
 }
 
 func (s *VoucherRedemptionService) UpdateRedemption(redemptionId string, req *models.VoucherRedemptionUpdateDto) (*models.VoucherRedemption, error) {
-	if err := s.validator.Struct(req); err != nil {
+	if err := s.validator.Validate(req); err != nil {
 		return nil, errors.NewBadRequestError(err.Error())
 	}
 

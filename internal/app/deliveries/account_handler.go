@@ -21,7 +21,6 @@ func (h *AccountHandler) RegisterRoutes(router fiber.Router) {
 	accountGroup := router.Group("/accounts")
 
 	accountGroup.Get("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.GetMe)
-	accountGroup.Patch("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.UpdateMe)
 	accountGroup.Delete("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.DeleteMe)
 	accountGroup.Get("/:id", h.GetAccountByID)
 }
@@ -46,22 +45,6 @@ func (h *AccountHandler) GetAccountByID(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 	account, err := h.accountService.GetAccount(id)
-	if err != nil {
-		return pkg.ErrorResponse(c, err)
-	}
-
-	return pkg.SuccessResponse(c, account)
-}
-
-func (h *AccountHandler) UpdateMe(c *fiber.Ctx) error {
-	account := c.Locals("account").(*models.Account)
-
-	var dto models.AccountUpdateDto
-	if err := c.BodyParser(&dto); err != nil {
-		return pkg.ErrorResponse(c, err)
-	}
-
-	account, err := h.accountService.UpdateAccount(account.ConnectID.String(), &dto)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

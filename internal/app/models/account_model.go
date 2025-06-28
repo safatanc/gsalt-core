@@ -15,13 +15,3 @@ type Account struct {
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
-
-type AccountCreateDto struct {
-	Balance int64 `json:"balance" validate:"min=0"`
-	Points  int64 `json:"points" validate:"min=0"`
-}
-
-type AccountUpdateDto struct {
-	Balance *int64 `json:"balance,omitempty" validate:"omitempty,min=0"`
-	Points  *int64 `json:"points,omitempty" validate:"omitempty,min=0"`
-}

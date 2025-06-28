@@ -65,21 +65,38 @@ func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 func (h *TransactionHandler) GetMyTransactions(c *fiber.Ctx) error {
 	account := c.Locals("account").(*models.Account)
 
-	// Parse query parameters
+	// Parse pagination from query parameters
+	var pagination models.PaginationRequest
+
+	// Parse page parameter
+	pageStr := c.Query("page", "1")
+	if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+		pagination.Page = page
+	} else {
+		pagination.Page = 1
+	}
+
+	// Parse limit parameter
 	limitStr := c.Query("limit", "10")
-	offsetStr := c.Query("offset", "0")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		limit = 10
+	if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+		pagination.Limit = limit
+	} else {
+		pagination.Limit = 10
 	}
 
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		offset = 0
+	// Parse order parameter
+	order := c.Query("order", "desc")
+	if order == "asc" || order == "desc" {
+		pagination.Order = order
+	} else {
+		pagination.Order = "desc"
 	}
 
-	transactions, err := h.transactionService.GetTransactionsByAccount(account.ConnectID.String(), limit, offset)
+	// Parse order_field parameter
+	orderField := c.Query("order_field", "created_at")
+	pagination.OrderField = orderField
+
+	transactions, err := h.transactionService.GetTransactionsByAccount(account.ConnectID.String(), &pagination)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -104,7 +121,10 @@ func (h *TransactionHandler) UpdateTransaction(c *fiber.Ctx) error {
 }
 
 type TopupRequest struct {
-	Amount              string  `json:"amount" validate:"required"`
+	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
+	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
+	PaymentCurrency     *string `json:"payment_currency,omitempty"`
+	PaymentMethod       *string `json:"payment_method,omitempty"`
 	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
 }
 
@@ -116,12 +136,21 @@ func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	amount, err := decimal.NewFromString(req.Amount)
+	// Convert GSALT amount to units (1 GSALT = 100 units)
+	amountGsalt, err := decimal.NewFromString(req.AmountGsalt)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
+	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
 
-	transaction, err := h.transactionService.ProcessTopup(account.ConnectID.String(), amount, req.ExternalReferenceID)
+	transaction, err := h.transactionService.ProcessTopup(
+		account.ConnectID.String(),
+		amountGsaltUnits,
+		req.PaymentAmount,
+		req.PaymentCurrency,
+		req.PaymentMethod,
+		req.ExternalReferenceID,
+	)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -131,7 +160,7 @@ func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 
 type TransferRequest struct {
 	DestinationAccountID string  `json:"destination_account_id" validate:"required,uuid"`
-	Amount               string  `json:"amount" validate:"required"`
+	AmountGsalt          string  `json:"amount_gsalt" validate:"required"`
 	Description          *string `json:"description,omitempty"`
 }
 
@@ -143,15 +172,17 @@ func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	amount, err := decimal.NewFromString(req.Amount)
+	// Convert GSALT amount to units (1 GSALT = 100 units)
+	amountGsalt, err := decimal.NewFromString(req.AmountGsalt)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
+	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
 
 	transferOut, transferIn, err := h.transactionService.ProcessTransfer(
 		account.ConnectID.String(),
 		req.DestinationAccountID,
-		amount,
+		amountGsaltUnits,
 		req.Description,
 	)
 	if err != nil {
@@ -167,7 +198,10 @@ func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 }
 
 type PaymentRequest struct {
-	Amount              string  `json:"amount" validate:"required"`
+	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
+	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
+	PaymentCurrency     *string `json:"payment_currency,omitempty"`
+	PaymentMethod       *string `json:"payment_method,omitempty"`
 	Description         *string `json:"description,omitempty"`
 	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
 }
@@ -180,14 +214,19 @@ func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	amount, err := decimal.NewFromString(req.Amount)
+	// Convert GSALT amount to units (1 GSALT = 100 units)
+	amountGsalt, err := decimal.NewFromString(req.AmountGsalt)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
+	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
 
 	transaction, err := h.transactionService.ProcessPayment(
 		account.ConnectID.String(),
-		amount,
+		amountGsaltUnits,
+		req.PaymentAmount,
+		req.PaymentCurrency,
+		req.PaymentMethod,
 		req.Description,
 		req.ExternalReferenceID,
 	)

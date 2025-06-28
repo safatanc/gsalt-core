@@ -1,24 +1,40 @@
-# GSalt Core - Payment Gateway & Loyalty System
+# GSalt Core - Payment Gateway & Digital Wallet System
 
-GSalt Core adalah sistem internal Safatanc Group untuk payment gateway, manajemen loyalty points, balance management, dan voucher redemption dengan fitur topup, transfer, transaksi, dan gift.
+GSalt Core is Safatanc Group's payment gateway and digital wallet system that supports topup, transfer, payment, and voucher redemption with GSALT (Safatanc Global Loyalty Token) system. This system functions as a multi-currency payment gateway and digital wallet with automatic conversion to GSALT units.
 
-## 🚀 Features
+## Features
 
-- **Account Management**: Manajemen akun pengguna dengan balance dan loyalty points
-- **Transaction Processing**: Topup, transfer, payment, dan voucher redemption
-- **Voucher System**: Manajemen voucher dengan berbagai tipe (balance, loyalty points, discount)
-- **Authentication**: Integrasi dengan Safatanc Connect untuk autentikasi
-- **Database Transactions**: Atomic operations untuk data integrity
+- **Digital Wallet**: Balance management in GSALT units with multi-currency conversion
+- **Payment Gateway**: Payment processing through various methods (QRIS, Bank Transfer, GSALT Balance)
+- **Multi-Currency Support**: Supports IDR, USD, EUR, SGD with automatic exchange rates
+- **Transaction Processing**: Topup, transfer, payment with atomic operations
+- **Voucher System**: Voucher management with various types and GSALT conversion
+- **GSALT Exchange**: 1 GSALT = 100 units (2 decimal places), default 1000 IDR = 1 GSALT
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Backend**: Go (Fiber framework)
-- **Database**: PostgreSQL dengan GORM
+- **Database**: PostgreSQL with GORM
 - **Authentication**: JWT via Safatanc Connect
 - **Dependency Injection**: Google Wire
 - **Validation**: go-playground/validator
 
-## 📦 Installation
+## GSALT System
+
+### GSALT Units
+- **1 GSALT = 100 units** (for 2 decimal precision)
+- **Default Exchange Rate**: 1000 IDR = 1 GSALT
+- **Balance Storage**: Stored in GSALT units (int64)
+- **Supported Currencies**: IDR, USD, EUR, SGD
+
+### Payment Methods
+- `GSALT_BALANCE`: Pay using GSALT balance
+- `QRIS`: Pay via QRIS
+- `BANK_TRANSFER`: Bank transfer
+- `CREDIT_CARD`: Credit card
+- `DEBIT_CARD`: Debit card
+
+## Installation
 
 1. Clone repository
 ```bash
@@ -52,13 +68,13 @@ cd injector && wire
 go run cmd/app/main.go
 ```
 
-## 🌐 API Documentation
+## API Documentation
 
-Base URL: `http://localhost:8080/api/v1`
+Base URL: `http://localhost:8080`
 
 ### Authentication
 
-Semua endpoint yang memerlukan autentikasi menggunakan header:
+All endpoints requiring authentication use header:
 ```
 Authorization: Bearer <your-access-token>
 ```
@@ -71,14 +87,14 @@ Check application health status.
 **Response:**
 ```json
 {
-  "status": "ok",
-  "service": "gsalt-core"
+  "success": true,
+  "data": "gsalt-core"
 }
 ```
 
 ---
 
-## 👤 Account Management
+## Account Management
 
 ### GET /accounts/me
 Get current user account information.
@@ -91,7 +107,7 @@ Get current user account information.
   "success": true,
   "data": {
     "connect_id": "uuid",
-    "balance": 100000,
+    "balance": 1000000,
     "points": 500,
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z"
@@ -99,35 +115,36 @@ Get current user account information.
 }
 ```
 
-### PATCH /accounts/me
-Update current user account.
+**Notes:**
+- Balance is in GSALT units (1000000 units = 10,000 GSALT)
 
-**Headers:** `Authorization: Bearer <token>`
+### GET /accounts/:id
+Get account by connect ID (public endpoint).
 
-**Request Body:**
-```json
-{
-  "balance": 150000,
-  "points": 750
-}
-```
+**Parameters:**
+- `id` (string): Account connect ID
+
+**Response:** Same format as GET /accounts/me
 
 ### DELETE /accounts/me
 Delete current user account (soft delete).
 
 **Headers:** `Authorization: Bearer <token>`
 
-### GET /accounts/:id
-Get account by connect ID.
-
-**Response:** Same as GET /accounts/me
+**Response:**
+```json
+{
+  "success": true,
+  "data": null
+}
+```
 
 ---
 
-## 💰 Transaction Management
+## Transaction Management
 
 ### POST /transactions
-Create a new transaction.
+Create a new transaction manually.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -135,14 +152,39 @@ Create a new transaction.
 ```json
 {
   "account_id": "uuid",
-  "type": "topup|transfer_in|transfer_out|payment|voucher_redemption",
-  "amount": "100000.00",
-  "currency": "IDR",
+  "type": "topup|transfer_in|transfer_out|payment|voucher_redemption|gift_in|gift_out",
+  "amount_gsalt_units": 100000,
+  "currency": "GSALT",
+  "exchange_rate_idr": "1000.00",
+  "payment_amount": 1000000,
+  "payment_currency": "IDR",
+  "payment_method": "QRIS",
   "description": "Transaction description",
-  "source_account_id": "uuid", // optional
-  "destination_account_id": "uuid", // optional
-  "voucher_code": "VOUCHER123", // optional
-  "external_reference_id": "ext-ref-123" // optional
+  "source_account_id": "uuid",
+  "destination_account_id": "uuid",
+  "voucher_code": "VOUCHER123",
+  "external_reference_id": "ext-ref-123"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "account_id": "uuid",
+    "type": "topup",
+    "amount_gsalt_units": 100000,
+    "currency": "GSALT",
+    "exchange_rate_idr": "1000.00",
+    "payment_amount": 1000000,
+    "payment_currency": "IDR",
+    "payment_method": "QRIS",
+    "status": "pending",
+    "description": "Transaction description",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -152,26 +194,40 @@ Get current user's transactions with pagination.
 **Headers:** `Authorization: Bearer <token>`
 
 **Query Parameters:**
-- `limit` (default: 10)
-- `offset` (default: 0)
+- `page` (default: 1): Page number to return
+- `limit` (default: 10): Number of transactions per page
+- `order` (default: desc): Sort order (asc|desc)
+- `order_field` (default: created_at): Field to sort by
 
 **Response:**
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "account_id": "uuid",
-      "type": "topup",
-      "amount": "100000.00",
-      "currency": "IDR",
-      "status": "completed",
-      "description": "Balance topup",
-      "created_at": "2024-01-01T00:00:00Z",
-      "completed_at": "2024-01-01T00:00:00Z"
-    }
-  ]
+  "data": {
+    "page": 1,
+    "limit": 10,
+    "total_pages": 5,
+    "total_items": 42,
+    "has_next": true,
+    "has_prev": false,
+    "items": [
+      {
+        "id": "uuid",
+        "account_id": "uuid",
+        "type": "topup",
+        "amount_gsalt_units": 100000,
+        "currency": "GSALT",
+        "exchange_rate_idr": "1000.00",
+        "payment_amount": 1000000,
+        "payment_currency": "IDR",
+        "payment_method": "QRIS",
+        "status": "completed",
+        "description": "Balance topup",
+        "created_at": "2024-01-01T00:00:00Z",
+        "completed_at": "2024-01-01T00:00:00Z"
+      }
+    ]
+  }
 }
 ```
 
@@ -180,34 +236,73 @@ Get specific transaction by ID.
 
 **Headers:** `Authorization: Bearer <token>`
 
+**Parameters:**
+- `id` (string): Transaction ID
+
+**Response:** Same format as single transaction object
+
 ### PATCH /transactions/:id
-Update transaction.
+Update transaction status and details.
 
 **Headers:** `Authorization: Bearer <token>`
+
+**Parameters:**
+- `id` (string): Transaction ID
 
 **Request Body:**
 ```json
 {
-  "status": "completed|pending|failed",
+  "status": "completed|pending|failed|cancelled",
+  "exchange_rate_idr": "1000.00",
+  "payment_amount": 1000000,
+  "payment_currency": "IDR",
+  "payment_method": "QRIS",
   "description": "Updated description"
 }
 ```
 
+**Response:** Updated transaction object
+
 ### POST /transactions/topup
-Process balance topup.
+Process balance topup via external payment.
 
 **Headers:** `Authorization: Bearer <token>`
 
 **Request Body:**
 ```json
 {
-  "amount": "100000.00",
+  "amount_gsalt": "100.00",
+  "payment_amount": 100000,
+  "payment_currency": "IDR",
+  "payment_method": "QRIS",
   "external_reference_id": "payment-gateway-ref-123"
 }
 ```
 
+**Notes:**
+- `amount_gsalt`: Amount in GSALT (will be converted to units)
+- `payment_amount`: Actual payment amount (optional, defaults to exchange rate calculation)
+- `payment_currency`: Payment currency (optional, defaults to IDR)
+- `payment_method`: Payment method (optional, defaults to QRIS)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "type": "topup",
+    "amount_gsalt_units": 10000,
+    "payment_amount": 100000,
+    "payment_currency": "IDR",
+    "payment_method": "QRIS",
+    "status": "completed"
+  }
+}
+```
+
 ### POST /transactions/transfer
-Transfer balance between accounts.
+Transfer GSALT balance between accounts.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -215,7 +310,7 @@ Transfer balance between accounts.
 ```json
 {
   "destination_account_id": "uuid",
-  "amount": "50000.00",
+  "amount_gsalt": "50.00",
   "description": "Transfer to friend"
 }
 ```
@@ -225,73 +320,125 @@ Transfer balance between accounts.
 {
   "success": true,
   "data": {
-    "transfer_out": { /* transaction object */ },
-    "transfer_in": { /* transaction object */ }
+    "transfer_out": {
+      "id": "uuid",
+      "type": "transfer_out",
+      "amount_gsalt_units": 5000,
+      "currency": "GSALT",
+      "status": "completed"
+    },
+    "transfer_in": {
+      "id": "uuid",
+      "type": "transfer_in", 
+      "amount_gsalt_units": 5000,
+      "currency": "GSALT",
+      "status": "completed"
+    }
   }
 }
 ```
 
 ### POST /transactions/payment
-Process payment (deduct balance).
+Process payment (can use GSALT balance or external payment).
 
 **Headers:** `Authorization: Bearer <token>`
 
 **Request Body:**
 ```json
 {
-  "amount": "25000.00",
+  "amount_gsalt": "25.00",
+  "payment_amount": 25000,
+  "payment_currency": "IDR",
+  "payment_method": "GSALT_BALANCE",
   "description": "Payment for service",
   "external_reference_id": "merchant-ref-123"
 }
 ```
 
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "type": "payment",
+    "amount_gsalt_units": 2500,
+    "payment_method": "GSALT_BALANCE",
+    "status": "completed"
+  }
+}
+```
+
 ---
 
-## 🎫 Voucher Management
+## Voucher Management
 
 ### GET /vouchers
 Get list of vouchers (public endpoint).
 
 **Query Parameters:**
-- `limit` (default: 10)
-- `offset` (default: 0)
-- `status` (active|expired|redeemed)
+- `page` (default: 1): Page number to return
+- `limit` (default: 10): Number of vouchers per page
+- `order` (default: desc): Sort order (asc|desc)
+- `order_field` (default: created_at): Field to sort by
+- `status` (optional): Filter by status (active|expired|redeemed)
 
 **Response:**
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "code": "WELCOME2024",
-      "name": "Welcome Bonus",
-      "description": "Welcome bonus for new users",
-      "type": "balance|loyalty_points|discount",
-      "value": "50000.00",
-      "currency": "IDR",
-      "loyalty_points_value": 100,
-      "discount_percentage": 10.5,
-      "discount_amount": "5000.00",
-      "max_redeem_count": 1000,
-      "current_redeem_count": 245,
-      "valid_from": "2024-01-01T00:00:00Z",
-      "valid_until": "2024-12-31T23:59:59Z",
-      "status": "active",
-      "created_at": "2024-01-01T00:00:00Z"
-    }
-  ]
+  "data": {
+    "page": 1,
+    "limit": 10,
+    "total_pages": 3,
+    "total_items": 25,
+    "has_next": true,
+    "has_prev": false,
+    "items": [
+      {
+        "id": "uuid",
+        "code": "WELCOME2024",
+        "name": "Welcome Bonus",
+        "description": "Welcome bonus for new users",
+        "type": "balance|loyalty_points|discount",
+        "value": "50.00",
+        "currency": "GSALT",
+        "loyalty_points_value": 100,
+        "discount_percentage": 10.5,
+        "discount_amount": "5.00",
+        "max_redeem_count": 1000,
+        "current_redeem_count": 245,
+        "valid_from": "2024-01-01T00:00:00Z",
+        "valid_until": "2024-12-31T23:59:59Z",
+        "status": "active",
+        "created_at": "2024-01-01T00:00:00Z"
+      }
+    ]
+  }
 }
 ```
 
 ### GET /vouchers/:id
 Get voucher by ID (public endpoint).
 
+**Parameters:**
+- `id` (string): Voucher ID
+
+**Response:** Single voucher object
+
 ### GET /vouchers/code/:code
 Get voucher by code (public endpoint).
 
+**Parameters:**
+- `code` (string): Voucher code
+
+**Response:** Single voucher object
+
 ### POST /vouchers/validate/:code
 Validate voucher eligibility (public endpoint).
+
+**Parameters:**
+- `code` (string): Voucher code
 
 **Response:**
 ```json
@@ -299,7 +446,14 @@ Validate voucher eligibility (public endpoint).
   "success": true,
   "data": {
     "valid": true,
-    "voucher": { /* voucher object */ }
+    "voucher": {
+      "id": "uuid",
+      "code": "WELCOME2024",
+      "name": "Welcome Bonus",
+      "type": "balance",
+      "value": "50.00",
+      "currency": "GSALT"
+    }
   }
 }
 ```
@@ -316,30 +470,50 @@ Create new voucher (protected endpoint).
   "name": "New Year Voucher",
   "description": "Special voucher for new year",
   "type": "balance",
-  "value": "100000.00",
-  "currency": "IDR",
+  "value": "100.00",
+  "currency": "GSALT",
   "max_redeem_count": 500,
   "valid_from": "2024-01-01T00:00:00Z",
   "valid_until": "2024-01-31T23:59:59Z"
 }
 ```
 
+**Response:** Created voucher object
+
 ### PATCH /vouchers/:id
 Update voucher (protected endpoint).
 
 **Headers:** `Authorization: Bearer <token>`
+
+**Parameters:**
+- `id` (string): Voucher ID
+
+**Request Body:** Partial voucher update fields
+
+**Response:** Updated voucher object
 
 ### DELETE /vouchers/:id
 Delete voucher (protected endpoint).
 
 **Headers:** `Authorization: Bearer <token>`
 
+**Parameters:**
+- `id` (string): Voucher ID
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
 ---
 
-## 🎁 Voucher Redemption
+## Voucher Redemption
 
 ### POST /voucher-redemptions/redeem
-Redeem voucher (main endpoint).
+Redeem voucher (automatically converts to GSALT balance).
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -365,12 +539,29 @@ Redeem voucher (main endpoint).
     "transaction": {
       "id": "uuid",
       "type": "voucher_redemption",
-      "amount": "50000.00",
+      "amount_gsalt_units": 5000,
+      "currency": "GSALT",
       "status": "completed"
     }
   }
 }
 ```
+
+### POST /voucher-redemptions
+Create redemption manually (admin endpoint).
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request Body:**
+```json
+{
+  "voucher_id": "uuid",
+  "account_id": "uuid",
+  "transaction_id": "uuid"
+}
+```
+
+**Response:** Created redemption object
 
 ### GET /voucher-redemptions/me
 Get current user's redemption history.
@@ -378,56 +569,137 @@ Get current user's redemption history.
 **Headers:** `Authorization: Bearer <token>`
 
 **Query Parameters:**
-- `limit` (default: 10)
-- `offset` (default: 0)
+- `page` (default: 1): Page number to return
+- `limit` (default: 10): Number of redemptions per page
+- `order` (default: desc): Sort order (asc|desc)
+- `order_field` (default: redeemed_at): Field to sort by
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "page": 1,
+    "limit": 10,
+    "total_pages": 2,
+    "total_items": 15,
+    "has_next": true,
+    "has_prev": false,
+    "items": [
+      {
+        "id": "uuid",
+        "voucher_id": "uuid",
+        "account_id": "uuid",
+        "transaction_id": "uuid",
+        "redeemed_at": "2024-01-01T00:00:00Z"
+      }
+    ]
+  }
+}
+```
 
 ### GET /voucher-redemptions/:id
 Get specific redemption by ID.
 
 **Headers:** `Authorization: Bearer <token>`
 
+**Parameters:**
+- `id` (string): Redemption ID
+
+**Response:** Single redemption object
+
 ### GET /voucher-redemptions/voucher/:voucher_id
 Get redemptions by voucher ID (admin endpoint).
 
 **Headers:** `Authorization: Bearer <token>`
 
-### POST /voucher-redemptions
-Create redemption manually (admin endpoint).
+**Parameters:**
+- `voucher_id` (string): Voucher ID
 
-**Headers:** `Authorization: Bearer <token>`
+**Query Parameters:**
+- `page` (default: 1): Page number to return
+- `limit` (default: 10): Number of redemptions per page
+- `order` (default: desc): Sort order (asc|desc)
+- `order_field` (default: redeemed_at): Field to sort by
+
+**Response:** Paginated redemption objects
 
 ### PATCH /voucher-redemptions/:id
 Update redemption.
 
 **Headers:** `Authorization: Bearer <token>`
 
+**Parameters:**
+- `id` (string): Redemption ID
+
+**Request Body:**
+```json
+{
+  "transaction_id": "uuid"
+}
+```
+
+**Response:** Updated redemption object
+
 ### DELETE /voucher-redemptions/:id
 Delete redemption.
 
 **Headers:** `Authorization: Bearer <token>`
 
+**Parameters:**
+- `id` (string): Redemption ID
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
 ---
 
-## 📊 Voucher Types
+## Voucher Types & GSALT Conversion
 
 ### 1. Balance Voucher (`balance`)
-- Menambahkan saldo ke akun pengguna
-- Field yang diperlukan: `value`, `currency`
-- Contoh: Voucher saldo Rp 50.000
+- Adds GSALT balance to user account
+- **GSALT Currency**: Directly converted to GSALT units
+- **IDR Currency**: Divided by 1000 then converted to GSALT units
+- Example: 50 GSALT voucher = 5000 units, 50000 IDR voucher = 5000 units
 
 ### 2. Loyalty Points Voucher (`loyalty_points`)
-- Menambahkan loyalty points ke akun pengguna
-- Field yang diperlukan: `loyalty_points_value`
-- Contoh: Voucher 100 loyalty points
+- Adds loyalty points that are converted to GSALT balance
+- **Conversion**: 1 point = 1 GSALT unit (0.01 GSALT)
+- Example: 100 loyalty points = 100 GSALT units = 1 GSALT
 
 ### 3. Discount Voucher (`discount`)
-- Memberikan diskon untuk pembayaran
-- Field yang diperlukan: `discount_percentage` atau `discount_amount`
-- Contoh: Diskon 10% atau potongan Rp 5.000
+- Provides discount for payments (doesn't change balance)
+- **Application**: During payment processing
+- Example: 10% discount or 5 GSALT deduction
 
 ---
 
-## 🔧 Environment Variables
+## Exchange Rate System
+
+### Default Exchange Rates
+- **1 GSALT = 1000 IDR** (default)
+- **USD, EUR, SGD**: Will be added later as needed
+
+### GSALT Units Calculation
+```
+GSALT Units = GSALT Amount × 100
+Example: 10.50 GSALT = 1050 units
+```
+
+### Currency Conversion Examples
+```
+IDR to GSALT: 1,000,000 IDR ÷ 1000 = 1000 GSALT = 100,000 units
+USD to GSALT: $100 × exchange_rate = X GSALT = X × 100 units
+```
+
+---
+
+## Environment Variables
 
 ```env
 # Database
@@ -440,11 +712,16 @@ PORT=8080
 CONNECT_BASE_URL=https://connect.safatanc.com
 CONNECT_CLIENT_ID=your-client-id
 CONNECT_CLIENT_SECRET=your-client-secret
+
+# GSALT Configuration
+DEFAULT_EXCHANGE_RATE_IDR=1000.00
+SUPPORTED_CURRENCIES=IDR,USD,EUR,SGD
+GSALT_UNITS_DECIMAL_PLACES=2
 ```
 
 ---
 
-## 🚦 Response Format
+## Response Format
 
 ### Success Response
 ```json
@@ -458,37 +735,61 @@ CONNECT_CLIENT_SECRET=your-client-secret
 ```json
 {
   "success": false,
-  "message": "Error description"
+  "message": "Error description [ERROR_CODE]"
 }
 ```
 
----
-
-## 📝 Transaction Status
-
-- `pending`: Transaksi sedang diproses
-- `completed`: Transaksi berhasil diselesaikan
-- `failed`: Transaksi gagal
-
-## 🎫 Voucher Status
-
-- `active`: Voucher aktif dan dapat digunakan
-- `expired`: Voucher sudah kedaluwarsa
-- `redeemed`: Voucher sudah mencapai batas maksimum redemption
+### Error Codes
+- `INSUFFICIENT_BALANCE`: Insufficient balance
+- `DAILY_LIMIT_EXCEEDED`: Daily limit exceeded
+- `AMOUNT_BELOW_MINIMUM`: Amount below minimum limit
+- `AMOUNT_ABOVE_MAXIMUM`: Amount above maximum limit
+- `SELF_TRANSFER_NOT_ALLOWED`: Self transfer not allowed
+- `INVALID_STATUS_TRANSITION`: Invalid status transition
+- `DUPLICATE_TRANSACTION`: Duplicate transaction
 
 ---
 
-## 🔒 Security
+## Transaction Status
 
-- Semua endpoint protected menggunakan JWT authentication via Safatanc Connect
-- Input validation menggunakan go-playground/validator
-- Database transactions untuk memastikan data integrity
-- Soft delete untuk data audit trail
+- `pending`: Transaction is being processed
+- `completed`: Transaction completed successfully
+- `failed`: Transaction failed
+- `cancelled`: Transaction cancelled
+
+## Voucher Status
+
+- `active`: Voucher is active and can be used
+- `expired`: Voucher has expired
+- `redeemed`: Voucher has reached maximum redemption limit
+
+## Payment Methods
+
+- `GSALT_BALANCE`: Using GSALT balance
+- `QRIS`: QRIS payment
+- `BANK_TRANSFER`: Bank transfer
+- `CREDIT_CARD`: Credit card
+- `DEBIT_CARD`: Debit card
+- `GOPAY`: GoPay
+- `OVO`: OVO
+- `DANA`: DANA
 
 ---
 
-## 📞 Support
+## Security & Features
 
-Untuk pertanyaan dan dukungan, hubungi tim development Safatanc Group.
+- **Atomic Transactions**: Using database transactions for data integrity
+- **Row-level Locking**: Prevents race conditions with SELECT FOR UPDATE
+- **Idempotency**: Prevents duplicate transactions with external_reference_id
+- **Daily Limits**: Daily transaction limits for security
+- **Multi-currency Support**: Supports various currencies with exchange rates
+- **Validation**: Input validation using go-playground/validator
+- **Soft Delete**: Audit trail with soft delete
 
-**Built with ❤️ by Safatanc Group**
+---
+
+## Support
+
+For questions and support, contact Safatanc Group development team.
+
+**Built with love by Safatanc Group**

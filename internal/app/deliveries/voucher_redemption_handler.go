@@ -67,21 +67,38 @@ func (h *VoucherRedemptionHandler) GetRedemption(c *fiber.Ctx) error {
 func (h *VoucherRedemptionHandler) GetMyRedemptions(c *fiber.Ctx) error {
 	account := c.Locals("account").(*models.Account)
 
-	// Parse query parameters
+	// Parse pagination from query parameters
+	var pagination models.PaginationRequest
+
+	// Parse page parameter
+	pageStr := c.Query("page", "1")
+	if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+		pagination.Page = page
+	} else {
+		pagination.Page = 1
+	}
+
+	// Parse limit parameter
 	limitStr := c.Query("limit", "10")
-	offsetStr := c.Query("offset", "0")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		limit = 10
+	if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+		pagination.Limit = limit
+	} else {
+		pagination.Limit = 10
 	}
 
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		offset = 0
+	// Parse order parameter
+	order := c.Query("order", "desc")
+	if order == "asc" || order == "desc" {
+		pagination.Order = order
+	} else {
+		pagination.Order = "desc"
 	}
 
-	redemptions, err := h.voucherRedemptionService.GetRedemptionsByAccount(account.ConnectID.String(), limit, offset)
+	// Parse order_field parameter
+	orderField := c.Query("order_field", "redeemed_at")
+	pagination.OrderField = orderField
+
+	redemptions, err := h.voucherRedemptionService.GetRedemptionsByAccount(account.ConnectID.String(), &pagination)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -92,21 +109,38 @@ func (h *VoucherRedemptionHandler) GetMyRedemptions(c *fiber.Ctx) error {
 func (h *VoucherRedemptionHandler) GetRedemptionsByVoucher(c *fiber.Ctx) error {
 	voucherId := c.Params("voucher_id")
 
-	// Parse query parameters
+	// Parse pagination from query parameters
+	var pagination models.PaginationRequest
+
+	// Parse page parameter
+	pageStr := c.Query("page", "1")
+	if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+		pagination.Page = page
+	} else {
+		pagination.Page = 1
+	}
+
+	// Parse limit parameter
 	limitStr := c.Query("limit", "10")
-	offsetStr := c.Query("offset", "0")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		limit = 10
+	if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+		pagination.Limit = limit
+	} else {
+		pagination.Limit = 10
 	}
 
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		offset = 0
+	// Parse order parameter
+	order := c.Query("order", "desc")
+	if order == "asc" || order == "desc" {
+		pagination.Order = order
+	} else {
+		pagination.Order = "desc"
 	}
 
-	redemptions, err := h.voucherRedemptionService.GetRedemptionsByVoucher(voucherId, limit, offset)
+	// Parse order_field parameter
+	orderField := c.Query("order_field", "redeemed_at")
+	pagination.OrderField = orderField
+
+	redemptions, err := h.voucherRedemptionService.GetRedemptionsByVoucher(voucherId, &pagination)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

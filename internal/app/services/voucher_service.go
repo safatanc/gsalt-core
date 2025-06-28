@@ -99,7 +99,29 @@ func (s *VoucherService) GetVoucherByCode(code string) (*models.Voucher, error) 
 	return &voucher, nil
 }
 
-func (s *VoucherService) GetVouchers(limit, offset int, status *models.VoucherStatus) ([]models.Voucher, error) {
+func (s *VoucherService) GetVouchers(pagination *models.PaginationRequest, status *models.VoucherStatus) (*models.Pagination[[]models.Voucher], error) {
+	// Set defaults
+	if pagination.Limit <= 0 {
+		pagination.Limit = 10
+	}
+	if pagination.Page <= 0 {
+		pagination.Page = 1
+	}
+
+	offset := (pagination.Page - 1) * pagination.Limit
+
+	// Build query for counting
+	countQuery := s.db.Model(&models.Voucher{})
+	if status != nil {
+		countQuery = countQuery.Where("status = ?", *status)
+	}
+
+	// Count total items
+	var totalItems int64
+	if err := countQuery.Count(&totalItems).Error; err != nil {
+		return nil, errors.NewInternalServerError(err, "Failed to count vouchers")
+	}
+
 	var vouchers []models.Voucher
 	query := s.db.Order("created_at DESC")
 
@@ -107,8 +129,8 @@ func (s *VoucherService) GetVouchers(limit, offset int, status *models.VoucherSt
 		query = query.Where("status = ?", *status)
 	}
 
-	if limit > 0 {
-		query = query.Limit(limit)
+	if pagination.Limit > 0 {
+		query = query.Limit(pagination.Limit)
 	}
 	if offset > 0 {
 		query = query.Offset(offset)
@@ -119,7 +141,22 @@ func (s *VoucherService) GetVouchers(limit, offset int, status *models.VoucherSt
 		return nil, errors.NewInternalServerError(err, "Failed to get vouchers")
 	}
 
-	return vouchers, nil
+	// Calculate pagination metadata
+	totalPages := int((totalItems + int64(pagination.Limit) - 1) / int64(pagination.Limit))
+	hasNext := pagination.Page < totalPages
+	hasPrev := pagination.Page > 1
+
+	result := &models.Pagination[[]models.Voucher]{
+		Page:       pagination.Page,
+		Limit:      pagination.Limit,
+		TotalPages: totalPages,
+		TotalItems: int(totalItems),
+		HasNext:    hasNext,
+		HasPrev:    hasPrev,
+		Items:      vouchers,
+	}
+
+	return result, nil
 }
 
 func (s *VoucherService) UpdateVoucher(voucherId string, req *models.VoucherUpdateDto) (*models.Voucher, error) {

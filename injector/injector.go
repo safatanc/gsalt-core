@@ -14,6 +14,7 @@ import (
 
 // Application represents the main application container for gsalt-core
 type Application struct {
+	HealthHandler            *deliveries.HealthHandler
 	AccountHandler           *deliveries.AccountHandler
 	TransactionHandler       *deliveries.TransactionHandler
 	VoucherHandler           *deliveries.VoucherHandler
@@ -28,6 +29,7 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 	//     router.Get("/accounts", h.GetAllAccounts)
 	//     router.Post("/accounts", h.CreateAccount)
 	// }
+	app.HealthHandler.RegisterRoutes(router)
 	app.AccountHandler.RegisterRoutes(router)
 	app.TransactionHandler.RegisterRoutes(router)
 	app.VoucherHandler.RegisterRoutes(router)
@@ -56,6 +58,7 @@ var middlewareSet = wire.NewSet(
 
 // Handler providers
 var handlerSet = wire.NewSet(
+	deliveries.NewHealthHandler,
 	deliveries.NewAccountHandler,
 	deliveries.NewTransactionHandler,
 	deliveries.NewVoucherHandler,

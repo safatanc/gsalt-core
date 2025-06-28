@@ -84,23 +84,28 @@ func (s *AccountService) GetAccountByToken(accessToken string) (*models.Account,
 	return s.GetAccount(connectUser.ID.String())
 }
 
-func (s *AccountService) UpdateAccount(connectId string, req *models.AccountUpdateDto) (*models.Account, error) {
-	if err := s.validator.Validate(req); err != nil {
-		return nil, errors.NewBadRequestError(err.Error())
-	}
-
+func (s *AccountService) AddBalance(connectId string, amount int64) (*models.Account, error) {
 	account, err := s.GetAccount(connectId)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update fields if provided
-	if req.Balance != nil {
-		account.Balance = *req.Balance
+	account.Balance += amount
+
+	if err := s.db.Save(account).Error; err != nil {
+		return nil, errors.NewInternalServerError(err, "Failed to update account")
 	}
-	if req.Points != nil {
-		account.Points = *req.Points
+
+	return account, nil
+}
+
+func (s *AccountService) AddPoints(connectId string, amount int64) (*models.Account, error) {
+	account, err := s.GetAccount(connectId)
+	if err != nil {
+		return nil, err
 	}
+
+	account.Points += amount
 
 	if err := s.db.Save(account).Error; err != nil {
 		return nil, errors.NewInternalServerError(err, "Failed to update account")

@@ -79,28 +79,46 @@ func (h *VoucherHandler) GetVoucherByCode(c *fiber.Ctx) error {
 }
 
 func (h *VoucherHandler) GetVouchers(c *fiber.Ctx) error {
-	// Parse query parameters
+	// Parse pagination from query parameters
+	var pagination models.PaginationRequest
+
+	// Parse page parameter
+	pageStr := c.Query("page", "1")
+	if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+		pagination.Page = page
+	} else {
+		pagination.Page = 1
+	}
+
+	// Parse limit parameter
 	limitStr := c.Query("limit", "10")
-	offsetStr := c.Query("offset", "0")
+	if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+		pagination.Limit = limit
+	} else {
+		pagination.Limit = 10
+	}
+
+	// Parse order parameter
+	order := c.Query("order", "desc")
+	if order == "asc" || order == "desc" {
+		pagination.Order = order
+	} else {
+		pagination.Order = "desc"
+	}
+
+	// Parse order_field parameter
+	orderField := c.Query("order_field", "created_at")
+	pagination.OrderField = orderField
+
+	// Parse status parameter
 	statusStr := c.Query("status")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		limit = 10
-	}
-
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil {
-		offset = 0
-	}
-
 	var status *models.VoucherStatus
 	if statusStr != "" {
 		voucherStatus := models.VoucherStatus(statusStr)
 		status = &voucherStatus
 	}
 
-	vouchers, err := h.voucherService.GetVouchers(limit, offset, status)
+	vouchers, err := h.voucherService.GetVouchers(&pagination, status)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

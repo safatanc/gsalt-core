@@ -40,12 +40,15 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 var infrastructureSet = wire.NewSet(
 	infrastructures.NewDatabase,
 	infrastructures.NewValidator,
+	infrastructures.NewXenditConfig,
+	infrastructures.NewXenditClient,
 )
 
 // Service providers
 var serviceSet = wire.NewSet(
 	services.NewConnectService,
 	services.NewAccountService,
+	services.NewXenditService,
 	services.NewTransactionService,
 	services.NewVoucherService,
 	services.NewVoucherRedemptionService,

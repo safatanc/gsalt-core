@@ -19,19 +19,24 @@ import (
 
 // InitializeApplication initializes the application with all its dependencies
 func InitializeApplication() (*Application, error) {
+	healthHandler := deliveries.NewHealthHandler()
 	db := infrastructures.NewDatabase()
 	validator := infrastructures.NewValidator()
 	connectService := services.NewConnectService()
 	accountService := services.NewAccountService(db, validator, connectService)
 	authMiddleware := middlewares.NewAuthMiddleware(connectService, accountService)
 	accountHandler := deliveries.NewAccountHandler(accountService, authMiddleware)
-	transactionService := services.NewTransactionService(db, validator, accountService)
+	xenditConfig := infrastructures.NewXenditConfig()
+	xenditClient := infrastructures.NewXenditClient(xenditConfig)
+	xenditService := services.NewXenditService(xenditClient, db)
+	transactionService := services.NewTransactionService(db, validator, accountService, xenditService)
 	transactionHandler := deliveries.NewTransactionHandler(transactionService, authMiddleware)
 	voucherService := services.NewVoucherService(db, validator)
 	voucherHandler := deliveries.NewVoucherHandler(voucherService, authMiddleware)
 	voucherRedemptionService := services.NewVoucherRedemptionService(db, validator, voucherService, accountService, transactionService)
 	voucherRedemptionHandler := deliveries.NewVoucherRedemptionHandler(voucherRedemptionService, authMiddleware)
 	application := &Application{
+		HealthHandler:            healthHandler,
 		AccountHandler:           accountHandler,
 		TransactionHandler:       transactionHandler,
 		VoucherHandler:           voucherHandler,
@@ -44,6 +49,7 @@ func InitializeApplication() (*Application, error) {
 
 // Application represents the main application container for gsalt-core
 type Application struct {
+	HealthHandler            *deliveries.HealthHandler
 	AccountHandler           *deliveries.AccountHandler
 	TransactionHandler       *deliveries.TransactionHandler
 	VoucherHandler           *deliveries.VoucherHandler
@@ -53,6 +59,7 @@ type Application struct {
 // RegisterRoutes registers all application routes using a Fiber router
 func (app *Application) RegisterRoutes(router fiber.Router) {
 
+	app.HealthHandler.RegisterRoutes(router)
 	app.AccountHandler.RegisterRoutes(router)
 	app.TransactionHandler.RegisterRoutes(router)
 	app.VoucherHandler.RegisterRoutes(router)
@@ -60,13 +67,13 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 }
 
 // Infrastructure providers
-var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewValidator)
+var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewValidator, infrastructures.NewXenditConfig, infrastructures.NewXenditClient)
 
 // Service providers
-var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService)
+var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewXenditService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService)
 
 // Middleware providers
 var middlewareSet = wire.NewSet(middlewares.NewAuthMiddleware)
 
 // Handler providers
-var handlerSet = wire.NewSet(deliveries.NewAccountHandler, deliveries.NewTransactionHandler, deliveries.NewVoucherHandler, deliveries.NewVoucherRedemptionHandler, wire.Struct(new(Application), "*"))
+var handlerSet = wire.NewSet(deliveries.NewHealthHandler, deliveries.NewAccountHandler, deliveries.NewTransactionHandler, deliveries.NewVoucherHandler, deliveries.NewVoucherRedemptionHandler, wire.Struct(new(Application), "*"))

@@ -1,9 +1,11 @@
 package deliveries
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/middlewares"
 	"github.com/safatanc/gsalt-core/internal/app/models"
 	"github.com/safatanc/gsalt-core/internal/app/pkg"
@@ -35,6 +37,14 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	transactionGroup.Post("/topup", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessTopup)
 	transactionGroup.Post("/transfer", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessTransfer)
 	transactionGroup.Post("/payment", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessPayment)
+
+	// Payment confirmation/rejection (admin or external)
+	transactionGroup.Post("/:id/confirm", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ConfirmPayment)
+	transactionGroup.Post("/:id/reject", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.RejectPayment)
+
+	// Webhook routes (no authentication required)
+	webhookGroup := router.Group("/webhooks")
+	webhookGroup.Post("/xendit/payment", h.HandleXenditWebhook)
 }
 
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
@@ -120,18 +130,10 @@ func (h *TransactionHandler) UpdateTransaction(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, transaction)
 }
 
-type TopupRequest struct {
-	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
-	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
-	PaymentCurrency     *string `json:"payment_currency,omitempty"`
-	PaymentMethod       *string `json:"payment_method,omitempty"`
-	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
-}
-
 func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 	account := c.Locals("account").(*models.Account)
 
-	var req TopupRequest
+	var req models.TopupRequest
 	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -143,7 +145,7 @@ func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 	}
 	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
 
-	transaction, err := h.transactionService.ProcessTopup(
+	topupResponse, err := h.transactionService.ProcessTopup(
 		account.ConnectID.String(),
 		amountGsaltUnits,
 		req.PaymentAmount,
@@ -155,19 +157,13 @@ func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	return pkg.SuccessResponse(c, transaction)
-}
-
-type TransferRequest struct {
-	DestinationAccountID string  `json:"destination_account_id" validate:"required,uuid"`
-	AmountGsalt          string  `json:"amount_gsalt" validate:"required"`
-	Description          *string `json:"description,omitempty"`
+	return pkg.SuccessResponse(c, topupResponse)
 }
 
 func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 	account := c.Locals("account").(*models.Account)
 
-	var req TransferRequest
+	var req models.TransferRequest
 	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -197,19 +193,10 @@ func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, response)
 }
 
-type PaymentRequest struct {
-	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
-	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
-	PaymentCurrency     *string `json:"payment_currency,omitempty"`
-	PaymentMethod       *string `json:"payment_method,omitempty"`
-	Description         *string `json:"description,omitempty"`
-	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
-}
-
 func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
 	account := c.Locals("account").(*models.Account)
 
-	var req PaymentRequest
+	var req models.PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -235,4 +222,76 @@ func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
 	}
 
 	return pkg.SuccessResponse(c, transaction)
+}
+
+func (h *TransactionHandler) ConfirmPayment(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var req models.ConfirmPaymentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	transaction, err := h.transactionService.ConfirmPayment(id, req.ExternalPaymentID)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, transaction)
+}
+
+func (h *TransactionHandler) RejectPayment(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	var req models.RejectPaymentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	transaction, err := h.transactionService.RejectPayment(id, req.Reason)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, transaction)
+}
+
+// HandleXenditWebhook handles webhook notifications from Xendit
+func (h *TransactionHandler) HandleXenditWebhook(c *fiber.Ctx) error {
+	var payload models.XenditWebhookPayload
+	if err := c.BodyParser(&payload); err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid webhook payload"))
+	}
+
+	// TODO: Verify webhook signature
+	// callbackToken := c.Get("X-CALLBACK-TOKEN")
+	// if !verifyXenditSignature(callbackToken, payload) {
+	//     return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Invalid webhook signature"))
+	// }
+
+	// Process webhook based on event type
+	switch payload.Event {
+	case "payment.completed":
+		// Confirm the payment
+		_, err := h.transactionService.ConfirmPayment(payload.TransactionID, &payload.PaymentRequestID)
+		if err != nil {
+			// Log error but don't return error to Xendit to prevent retries
+			// In production, you might want to use a proper logger
+			fmt.Printf("Failed to confirm payment for transaction %s: %v\n", payload.TransactionID, err)
+		}
+	case "payment.failed", "payment.expired":
+		// Reject the payment
+		reason := fmt.Sprintf("Payment %s in Xendit", payload.Status)
+		_, err := h.transactionService.RejectPayment(payload.TransactionID, &reason)
+		if err != nil {
+			// Log error but don't return error to Xendit to prevent retries
+			fmt.Printf("Failed to reject payment for transaction %s: %v\n", payload.TransactionID, err)
+		}
+	}
+
+	// Always return success to Xendit to prevent retries
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Webhook processed",
+	})
 }

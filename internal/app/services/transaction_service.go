@@ -1,29 +1,38 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/models"
-	"github.com/safatanc/gsalt-core/internal/app/pkg"
 	"github.com/safatanc/gsalt-core/internal/infrastructures"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+)
+
+// Xendit payment method constants for compatibility
+const (
+	XenditPaymentMethodQRIS           = "QRIS"
+	XenditPaymentMethodVirtualAccount = "VIRTUAL_ACCOUNT"
+	XenditPaymentMethodEWallet        = "EWALLET"
 )
 
 type TransactionService struct {
 	db             *gorm.DB
 	validator      *infrastructures.Validator
 	accountService *AccountService
+	xenditService  *XenditService
 }
 
-func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService) *TransactionService {
+func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService, xenditService *XenditService) *TransactionService {
 	return &TransactionService{
 		db:             db,
 		validator:      validator,
 		accountService: accountService,
+		xenditService:  xenditService,
 	}
 }
 
@@ -337,7 +346,7 @@ func (s *TransactionService) UpdateTransaction(transactionId string, req *models
 	return transaction, nil
 }
 
-func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethod *string, externalRefId *string) (*models.Transaction, error) {
+func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethod *string, externalRefId *string) (*models.TopupResponse, error) {
 	// Parse UUID first
 	accountUUID, err := uuid.Parse(accountId)
 	if err != nil {
@@ -353,47 +362,130 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 	if existingTxn, err := s.checkIdempotency(externalRefId); err != nil {
 		return nil, err
 	} else if existingTxn != nil {
-		return existingTxn, nil // Return existing transaction
+		// Create response for existing transaction
+		paymentInstructions, _ := existingTxn.GetPaymentInstructionsAsMap()
+		return &models.TopupResponse{
+			Transaction:         existingTxn,
+			PaymentInstructions: paymentInstructions,
+		}, nil
+	}
+
+	// Check daily limits
+	if err := s.checkDailyLimits(accountUUID, models.TransactionTypeTopup, amountGsaltUnits); err != nil {
+		return nil, err
+	}
+
+	// Auto-calculate payment_amount if not provided but payment_currency is provided
+	if paymentAmount == nil && paymentCurrency != nil {
+		// Convert GSALT units to IDR (1 GSALT = 100 units = 1000 IDR)
+		gsaltAmount := decimal.NewFromInt(amountGsaltUnits).Div(decimal.NewFromInt(100))
+		idrAmount := gsaltAmount.Mul(decimal.NewFromInt(1000))
+		calculatedAmount := idrAmount.IntPart()
+		paymentAmount = &calculatedAmount
 	}
 
 	var transaction *models.Transaction
 	now := time.Now()
-	exchangeRate := decimal.NewFromFloat(1000.00) // Default: 1000 IDR = 1 GSALT
+	exchangeRate := decimal.NewFromInt(1000) // 1 GSALT = 1000 IDR
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock and verify account with SELECT FOR UPDATE
-		var account models.Account
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("connect_id = ?", accountUUID).First(&account).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return errors.NewNotFoundError("Account not found")
-			}
-			return errors.NewInternalServerError(err, "Failed to get account")
+		// Determine if this is an external payment method
+		isExternalPayment := paymentMethod != nil && (*paymentMethod == "QRIS" || *paymentMethod == "BANK_TRANSFER" || *paymentMethod == "EWALLET")
+
+		// Set initial status
+		status := models.TransactionStatusCompleted
+		var completedAt *time.Time = &now
+
+		if isExternalPayment {
+			status = models.TransactionStatusPending
+			completedAt = nil
 		}
 
-		// Create topup transaction
+		// Create transaction record
+		description := fmt.Sprintf("Topup %d GSALT", amountGsaltUnits/100)
 		transaction = &models.Transaction{
-			AccountID:           account.ConnectID,
-			Type:                models.TransactionTypeTopup,
-			AmountGsaltUnits:    amountGsaltUnits,
-			Currency:            "GSALT",
-			ExchangeRateIDR:     &exchangeRate,
-			PaymentAmount:       paymentAmount,
-			PaymentCurrency:     paymentCurrency,
-			PaymentMethod:       paymentMethod,
-			Status:              models.TransactionStatusCompleted,
-			Description:         pkg.StringPtr(fmt.Sprintf("Topup %d GSALT", amountGsaltUnits)),
-			ExternalReferenceID: externalRefId,
-			CompletedAt:         &now,
+			AccountID:        accountUUID,
+			Type:             models.TransactionTypeTopup,
+			AmountGsaltUnits: amountGsaltUnits,
+			Currency:         "GSALT",
+			ExchangeRateIDR:  &exchangeRate,
+			Status:           status,
+			Description:      &description,
+			CompletedAt:      completedAt,
+			CreatedAt:        now,
+			UpdatedAt:        now,
 		}
 
+		// Set payment fields if provided
+		if paymentAmount != nil {
+			transaction.PaymentAmount = paymentAmount
+		}
+		if paymentCurrency != nil {
+			transaction.PaymentCurrency = paymentCurrency
+		}
+		if paymentMethod != nil {
+			transaction.PaymentMethod = paymentMethod
+		}
+		if externalRefId != nil {
+			transaction.ExternalReferenceID = externalRefId
+		}
+
+		// Create transaction in database
 		if err := tx.Create(transaction).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to create topup transaction")
 		}
 
-		// Update account balance atomically (both are in GSALT units)
-		account.Balance += amountGsaltUnits
-		if err := tx.Save(&account).Error; err != nil {
-			return errors.NewInternalServerError(err, "Failed to update account balance")
+		// For external payments, create Xendit payment request
+		if isExternalPayment && s.xenditService != nil {
+			var xenditPaymentMethod models.PaymentMethod = models.PaymentMethodQRIS // Default to QRIS
+			if paymentMethod != nil {
+				switch *paymentMethod {
+				case "QRIS":
+					xenditPaymentMethod = models.PaymentMethodQRIS
+				case "BANK_TRANSFER":
+					xenditPaymentMethod = models.PaymentMethodVirtualAccount
+				case "EWALLET":
+					xenditPaymentMethod = models.PaymentMethodEWallet
+				}
+			}
+
+			// Get account info for customer details
+			var account models.Account
+			if err := tx.Where("id = ?", accountUUID).First(&account).Error; err != nil {
+				return errors.NewInternalServerError(err, "Failed to get account details")
+			}
+
+			// Create payment request with Xendit
+			paymentResp, err := s.xenditService.CreateTopupPayment(
+				context.Background(),
+				transaction.ID.String(),
+				*paymentAmount,
+				xenditPaymentMethod,
+				&account,
+			)
+			if err != nil {
+				return errors.NewInternalServerError(err, "Failed to create payment request with Xendit")
+			}
+
+			// Convert payment response to JSON for storage
+			paymentInstructionsJSON, err := s.xenditService.ConvertPaymentResponseToJSON(paymentResp)
+			if err != nil {
+				return errors.NewInternalServerError(err, "Failed to convert payment instructions to JSON")
+			}
+
+			// Update transaction with Xendit payment request ID and payment instructions
+			transaction.ExternalReferenceID = &paymentResp.PaymentRequestID
+			transaction.PaymentInstructions = &paymentInstructionsJSON
+			if err := tx.Save(transaction).Error; err != nil {
+				return errors.NewInternalServerError(err, "Failed to update transaction with Xendit payment data")
+			}
+		}
+
+		// For non-external payments (direct balance credit), update account balance
+		if !isExternalPayment {
+			if err := s.updateAccountBalance(tx, accountUUID, amountGsaltUnits); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -403,7 +495,34 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		return nil, err
 	}
 
-	return transaction, nil
+	// Create response with payment instructions
+	paymentInstructions, _ := transaction.GetPaymentInstructionsAsMap()
+	response := &models.TopupResponse{
+		Transaction:         transaction,
+		PaymentInstructions: paymentInstructions,
+	}
+
+	return response, nil
+}
+
+// updateAccountBalance updates the account balance with the given amount
+func (s *TransactionService) updateAccountBalance(tx *gorm.DB, accountID uuid.UUID, amountGsaltUnits int64) error {
+	// Lock and get account
+	var account models.Account
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", accountID).First(&account).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.NewNotFoundError("Account not found")
+		}
+		return errors.NewInternalServerError(err, "Failed to get account")
+	}
+
+	// Update balance
+	account.Balance += amountGsaltUnits
+	if err := tx.Save(&account).Error; err != nil {
+		return errors.NewInternalServerError(err, "Failed to update account balance")
+	}
+
+	return nil
 }
 
 func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId string, amountGsaltUnits int64, description *string) (*models.Transaction, *models.Transaction, error) {
@@ -548,6 +667,28 @@ func (s *TransactionService) ProcessPayment(accountId string, amountGsaltUnits i
 	var transaction *models.Transaction
 	now := time.Now()
 	exchangeRate := decimal.NewFromFloat(1000.00) // Default: 1000 IDR = 1 GSALT
+
+	// Auto-calculate payment_amount if payment_currency is provided but payment_amount is not
+	// This ensures compliance with the database constraint chk_payment_fields_consistency
+	if paymentCurrency != nil && paymentAmount == nil {
+		// Calculate payment amount based on GSALT amount and exchange rate
+		gsaltDecimal := decimal.NewFromInt(amountGsaltUnits).Div(decimal.NewFromInt(100)) // Convert units to GSALT
+
+		// Calculate payment amount based on currency
+		switch *paymentCurrency {
+		case "IDR":
+			calculatedAmount := gsaltDecimal.Mul(exchangeRate).IntPart()
+			paymentAmount = &calculatedAmount
+		case "GSALT":
+			calculatedAmount := amountGsaltUnits
+			paymentAmount = &calculatedAmount
+		default:
+			// For other currencies (USD, EUR, SGD), use IDR as default for now
+			// TODO: Implement proper exchange rates for other currencies
+			calculatedAmount := gsaltDecimal.Mul(exchangeRate).IntPart()
+			paymentAmount = &calculatedAmount
+		}
+	}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Lock and verify account with SELECT FOR UPDATE
@@ -913,4 +1054,115 @@ func (s *TransactionService) ProcessGiftOut(sourceAccountId, destAccountId strin
 	}
 
 	return giftOut, giftIn, nil
+}
+
+// ConfirmPayment - Confirm payment for pending topup transactions
+func (s *TransactionService) ConfirmPayment(transactionId string, externalPaymentId *string) (*models.Transaction, error) {
+	transactionUUID, err := uuid.Parse(transactionId)
+	if err != nil {
+		return nil, errors.NewBadRequestError("Invalid transaction ID format")
+	}
+
+	var transaction *models.Transaction
+	now := time.Now()
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock and get the transaction
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", transactionUUID).First(&transaction).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return errors.NewNotFoundError("Transaction not found")
+			}
+			return errors.NewInternalServerError(err, "Failed to get transaction")
+		}
+
+		// Validate transaction can be confirmed
+		if transaction.Status != models.TransactionStatusPending {
+			return errors.NewBadRequestError("Only pending transactions can be confirmed [" + ErrCodeInvalidStatusTransition + "]")
+		}
+
+		if transaction.Type != models.TransactionTypeTopup {
+			return errors.NewBadRequestError("Only topup transactions can be confirmed")
+		}
+
+		// Lock and get the account
+		var account models.Account
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("connect_id = ?", transaction.AccountID).First(&account).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return errors.NewNotFoundError("Account not found")
+			}
+			return errors.NewInternalServerError(err, "Failed to get account")
+		}
+
+		// Update transaction status
+		transaction.Status = models.TransactionStatusCompleted
+		transaction.CompletedAt = &now
+		if externalPaymentId != nil {
+			// You can store external payment ID in external_reference_id or create a new field
+			if transaction.ExternalReferenceID == nil {
+				transaction.ExternalReferenceID = externalPaymentId
+			}
+		}
+
+		if err := tx.Save(transaction).Error; err != nil {
+			return errors.NewInternalServerError(err, "Failed to update transaction")
+		}
+
+		// Update account balance
+		account.Balance += transaction.AmountGsaltUnits
+		if err := tx.Save(&account).Error; err != nil {
+			return errors.NewInternalServerError(err, "Failed to update account balance")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return transaction, nil
+}
+
+// RejectPayment - Reject payment for pending transactions
+func (s *TransactionService) RejectPayment(transactionId string, reason *string) (*models.Transaction, error) {
+	transactionUUID, err := uuid.Parse(transactionId)
+	if err != nil {
+		return nil, errors.NewBadRequestError("Invalid transaction ID format")
+	}
+
+	var transaction models.Transaction
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock and get the transaction
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", transactionUUID).First(&transaction).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return errors.NewNotFoundError("Transaction not found")
+			}
+			return errors.NewInternalServerError(err, "Failed to get transaction")
+		}
+
+		// Validate transaction can be rejected
+		if transaction.Status != models.TransactionStatusPending {
+			return errors.NewBadRequestError("Only pending transactions can be rejected [" + ErrCodeInvalidStatusTransition + "]")
+		}
+
+		// Update transaction status
+		transaction.Status = models.TransactionStatusFailed
+		if reason != nil && *reason != "" {
+			failureReason := fmt.Sprintf("Payment rejected: %s", *reason)
+			transaction.Description = &failureReason
+		}
+
+		if err := tx.Save(&transaction).Error; err != nil {
+			return errors.NewInternalServerError(err, "Failed to update transaction")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &transaction, nil
 }

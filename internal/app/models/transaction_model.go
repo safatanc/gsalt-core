@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +40,7 @@ type Transaction struct {
 	PaymentAmount        *int64            `gorm:"column:payment_amount" json:"payment_amount,omitempty"`
 	PaymentCurrency      *string           `gorm:"column:payment_currency;size:5" json:"payment_currency,omitempty"`
 	PaymentMethod        *string           `gorm:"column:payment_method;size:50" json:"payment_method,omitempty"`
+	PaymentInstructions  *string           `gorm:"column:payment_instructions;type:jsonb" json:"payment_instructions,omitempty"`
 	Status               TransactionStatus `json:"status"`
 	Description          *string           `json:"description,omitempty"`
 	RelatedTransactionID *uuid.UUID        `json:"related_transaction_id,omitempty"`
@@ -62,6 +64,26 @@ func (t *Transaction) SetGsaltAmount(amount decimal.Decimal) {
 	t.AmountGsaltUnits = amount.Mul(decimal.NewFromInt(100)).IntPart()
 }
 
+// Helper method to parse payment instructions JSON
+func (t *Transaction) GetPaymentInstructionsAsMap() (map[string]interface{}, error) {
+	if t.PaymentInstructions == nil {
+		return nil, nil
+	}
+
+	var instructions map[string]interface{}
+	if err := json.Unmarshal([]byte(*t.PaymentInstructions), &instructions); err != nil {
+		return nil, err
+	}
+
+	return instructions, nil
+}
+
+// TopupResponse represents the response for topup operations
+type TopupResponse struct {
+	Transaction         *Transaction           `json:"transaction"`
+	PaymentInstructions map[string]interface{} `json:"payment_instructions,omitempty"`
+}
+
 type TransactionCreateDto struct {
 	AccountID            string           `json:"account_id" validate:"required,uuid"`
 	Type                 TransactionType  `json:"type" validate:"required,oneof=TOPUP TRANSFER_IN TRANSFER_OUT PAYMENT GIFT_IN GIFT_OUT VOUCHER_REDEMPTION"`
@@ -71,6 +93,7 @@ type TransactionCreateDto struct {
 	PaymentAmount        *int64           `json:"payment_amount,omitempty" validate:"omitempty,gt=0"`
 	PaymentCurrency      *string          `json:"payment_currency,omitempty" validate:"omitempty,len=3"`
 	PaymentMethod        *string          `json:"payment_method,omitempty" validate:"omitempty,max=50"`
+	PaymentInstructions  *string          `json:"payment_instructions,omitempty"`
 	Description          *string          `json:"description,omitempty" validate:"omitempty,max=500"`
 	RelatedTransactionID *string          `json:"related_transaction_id,omitempty" validate:"omitempty,uuid"`
 	SourceAccountID      *string          `json:"source_account_id,omitempty" validate:"omitempty,uuid"`
@@ -95,6 +118,7 @@ type TransactionUpdateDto struct {
 	PaymentAmount        *int64             `json:"payment_amount,omitempty" validate:"omitempty,gt=0"`
 	PaymentCurrency      *string            `json:"payment_currency,omitempty" validate:"omitempty,len=3"`
 	PaymentMethod        *string            `json:"payment_method,omitempty" validate:"omitempty,max=50"`
+	PaymentInstructions  *string            `json:"payment_instructions,omitempty"`
 	Description          *string            `json:"description,omitempty" validate:"omitempty,max=500"`
 	RelatedTransactionID *string            `json:"related_transaction_id,omitempty" validate:"omitempty,uuid"`
 	SourceAccountID      *string            `json:"source_account_id,omitempty" validate:"omitempty,uuid"`
@@ -102,4 +126,36 @@ type TransactionUpdateDto struct {
 	VoucherCode          *string            `json:"voucher_code,omitempty" validate:"omitempty,max=50"`
 	ExternalReferenceID  *string            `json:"external_reference_id,omitempty" validate:"omitempty,max=255"`
 	CompletedAt          *time.Time         `json:"completed_at,omitempty"`
+}
+
+// Request DTOs for transaction operations
+type TopupRequest struct {
+	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
+	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
+	PaymentCurrency     *string `json:"payment_currency,omitempty"`
+	PaymentMethod       *string `json:"payment_method,omitempty"`
+	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
+}
+
+type TransferRequest struct {
+	DestinationAccountID string  `json:"destination_account_id" validate:"required,uuid"`
+	AmountGsalt          string  `json:"amount_gsalt" validate:"required"`
+	Description          *string `json:"description,omitempty"`
+}
+
+type PaymentRequest struct {
+	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
+	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
+	PaymentCurrency     *string `json:"payment_currency,omitempty"`
+	PaymentMethod       *string `json:"payment_method,omitempty"`
+	Description         *string `json:"description,omitempty"`
+	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
+}
+
+type ConfirmPaymentRequest struct {
+	ExternalPaymentID *string `json:"external_payment_id,omitempty"`
+}
+
+type RejectPaymentRequest struct {
+	Reason *string `json:"reason,omitempty"`
 }

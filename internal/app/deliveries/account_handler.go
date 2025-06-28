@@ -20,6 +20,7 @@ func NewAccountHandler(accountService *services.AccountService, authMiddleware *
 func (h *AccountHandler) RegisterRoutes(router fiber.Router) {
 	accountGroup := router.Group("/accounts")
 
+	accountGroup.Post("/", h.authMiddleware.AuthConnect, h.CreateAccount)
 	accountGroup.Get("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.GetMe)
 	accountGroup.Delete("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.DeleteMe)
 	accountGroup.Get("/:id", h.GetAccountByID)

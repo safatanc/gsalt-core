@@ -96,6 +96,37 @@ Check application health status.
 
 ## Account Management
 
+### POST /accounts
+Create a new GSALT account for authenticated Safatanc Connect user.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request Body:** No request body required. Account is created using information from the authenticated Connect user.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "connect_id": "uuid",
+    "balance": 0,
+    "points": 0,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+**Notes:**
+- Requires valid Safatanc Connect authentication
+- New accounts start with 0 balance (in GSALT units) and 0 loyalty points
+- Returns error if account already exists for the Connect user
+- This endpoint only requires `AuthConnect` middleware (not `AuthAccount`)
+
+**Error Responses:**
+- `400 Bad Request`: If account already exists or Connect user not found
+- `401 Unauthorized`: If Connect token is missing or invalid
+
 ### GET /accounts/me
 Get current user account information.
 

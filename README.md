@@ -371,6 +371,175 @@ Process payment (can use GSALT balance or external payment).
 
 ---
 
+## Authentication & Middleware
+
+GSalt Core uses a two-layer authentication system through Safatanc Connect integration with middleware validation.
+
+### Authentication Flow
+
+1. **Connect Authentication** (`AuthConnect`): Validates Safatanc Connect token
+2. **Account Authentication** (`AuthAccount`): Validates GSALT account registration
+
+### Middleware Components
+
+#### AuthConnect Middleware
+Validates the user's Safatanc Connect authentication token.
+
+**Function**: Extracts and validates the Bearer token from Authorization header.
+
+**Process**:
+1. Extracts `Authorization` header
+2. Removes "Bearer " prefix from token
+3. Validates token with Safatanc Connect service
+4. Sets `connect_user` in fiber context locals
+5. Returns 401 if token is missing or invalid
+
+**Usage**:
+```go
+// Applied to endpoints requiring Safatanc Connect authentication
+router.Get("/protected", authMiddleware.AuthConnect, handler)
+```
+
+**Response on Failure**:
+```json
+{
+  "success": false,
+  "message": "Unauthorized"
+}
+```
+
+#### AuthAccount Middleware
+Validates that the authenticated Connect user has a registered GSALT account.
+
+**Function**: Ensures Connect user is registered in GSALT system.
+
+**Process**:
+1. Retrieves `connect_user` from context (set by AuthConnect)
+2. Fetches corresponding GSALT account using Connect user ID
+3. Sets `account` in fiber context locals
+4. Returns 401 if account not found
+
+**Dependencies**: Must be used after `AuthConnect` middleware.
+
+**Usage**:
+```go
+// Applied to endpoints requiring both Connect auth AND GSALT account
+router.Get("/wallet", authMiddleware.AuthConnect, authMiddleware.AuthAccount, handler)
+```
+
+**Response on Failure**:
+```json
+{
+  "success": false,
+  "message": "User with connect username {username} is not registered on GSALT. Please register first."
+}
+```
+
+### Context Locals
+
+After successful authentication, the following objects are available in fiber context:
+
+#### connect_user
+Available after `AuthConnect` middleware.
+```go
+connectUser := c.Locals("connect_user").(*models.ConnectUser)
+```
+
+**Properties**:
+- `ID`: Connect user UUID
+- `Username`: Connect username
+- `Email`: User email
+- Other Connect user properties
+
+#### account
+Available after `AuthAccount` middleware.
+```go
+account := c.Locals("account").(*models.Account)
+```
+
+**Properties**:
+- `ConnectID`: UUID linking to Connect user
+- `Balance`: GSALT balance in units
+- `Points`: Loyalty points
+- `CreatedAt`, `UpdatedAt`: Timestamps
+
+### Endpoint Protection Levels
+
+#### Public Endpoints
+No authentication required.
+```go
+// Example: Health check, voucher listing
+router.Get("/health", handler)
+router.Get("/vouchers", handler)
+```
+
+#### Connect-Only Endpoints
+Requires valid Safatanc Connect token.
+```go
+// Example: Admin functions (if implemented)
+router.Post("/admin/action", authMiddleware.AuthConnect, handler)
+```
+
+#### Account-Required Endpoints
+Requires both Connect authentication AND GSALT account registration.
+```go
+// Example: Most wallet operations
+router.Get("/accounts/me", authMiddleware.AuthConnect, authMiddleware.AuthAccount, handler)
+router.Post("/transactions/topup", authMiddleware.AuthConnect, authMiddleware.AuthAccount, handler)
+```
+
+### Authentication Headers
+
+All protected endpoints require the Authorization header:
+
+```http
+Authorization: Bearer <safatanc-connect-access-token>
+```
+
+**Example**:
+```http
+GET /accounts/me HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Error Handling
+
+The middleware system returns structured error responses:
+
+**401 Unauthorized** - Missing or invalid token:
+```json
+{
+  "success": false,
+  "message": "Unauthorized"
+}
+```
+
+**401 Unauthorized** - Connect user not registered in GSALT:
+```json
+{
+  "success": false,
+  "message": "User with connect username john_doe is not registered on GSALT. Please register first."
+}
+```
+
+### Integration with Safatanc Connect
+
+The authentication system integrates with Safatanc Connect service:
+
+- **Connect Service**: Validates tokens and retrieves user information
+- **Account Service**: Links Connect users to GSALT accounts
+- **Error Handling**: Provides clear feedback for registration requirements
+
+### Security Features
+
+- **Token Validation**: All tokens validated against Safatanc Connect
+- **Account Verification**: Ensures only registered users access wallet features
+- **Context Isolation**: User data stored securely in request context
+- **Error Clarity**: Clear error messages guide users to correct registration
+
+---
+
 ## Voucher Management
 
 ### GET /vouchers

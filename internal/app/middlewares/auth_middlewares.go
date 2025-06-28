@@ -50,7 +50,7 @@ func (m *AuthMiddleware) AuthAccount(c *fiber.Ctx) error {
 
 	account, err := m.accountService.GetAccount(connectUser.ID.String())
 	if err != nil {
-		return pkg.ErrorResponse(c, errors.NewUnauthorizedError(fmt.Sprintf("User with connect username %s is not registered on Getlayar. Please register first.", connectUser.Username)))
+		return pkg.ErrorResponse(c, errors.NewUnauthorizedError(fmt.Sprintf("User with connect username %s is not registered on GSALT. Please register first.", connectUser.Username)))
 	}
 
 	c.Locals("account", account)

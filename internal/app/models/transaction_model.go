@@ -39,7 +39,7 @@ type Transaction struct {
 	FeeGsaltUnits         int64             `json:"fee_gsalt_units" gorm:"default:0"`
 	TotalAmountGsaltUnits int64             `json:"total_amount_gsalt_units" gorm:"not null"`
 	Currency              string            `json:"currency" gorm:"type:varchar(10);default:'GSALT'"`
-	ExchangeRateIDR       *decimal.Decimal  `json:"exchange_rate_idr,omitempty" gorm:"type:decimal(20,4)"`
+	ExchangeRateIDR       *decimal.Decimal  `json:"exchange_rate_idr,omitempty" gorm:"column:exchange_rate_idr;type:decimal(20,4)"`
 	PaymentAmount         *int64            `json:"payment_amount,omitempty"`
 	PaymentCurrency       *string           `json:"payment_currency,omitempty" gorm:"type:varchar(10)"`
 	PaymentMethod         *string           `json:"payment_method,omitempty" gorm:"type:varchar(50)"`

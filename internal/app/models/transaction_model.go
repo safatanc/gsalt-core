@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 )
 
 type TransactionType string
@@ -19,39 +18,44 @@ const (
 	TransactionTypeGiftIn            TransactionType = "GIFT_IN"
 	TransactionTypeGiftOut           TransactionType = "GIFT_OUT"
 	TransactionTypeVoucherRedemption TransactionType = "VOUCHER_REDEMPTION"
+	TransactionTypeWithdrawal        TransactionType = "WITHDRAWAL"
 )
 
 type TransactionStatus string
 
 const (
-	TransactionStatusPending   TransactionStatus = "PENDING"
-	TransactionStatusCompleted TransactionStatus = "COMPLETED"
-	TransactionStatusFailed    TransactionStatus = "FAILED"
-	TransactionStatusCancelled TransactionStatus = "CANCELLED"
+	TransactionStatusPending    TransactionStatus = "PENDING"
+	TransactionStatusProcessing TransactionStatus = "PROCESSING"
+	TransactionStatusCompleted  TransactionStatus = "COMPLETED"
+	TransactionStatusFailed     TransactionStatus = "FAILED"
+	TransactionStatusCancelled  TransactionStatus = "CANCELLED"
 )
 
 type Transaction struct {
-	ID                   uuid.UUID         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	AccountID            uuid.UUID         `json:"account_id"`
-	Type                 TransactionType   `json:"type"`
-	AmountGsaltUnits     int64             `gorm:"column:amount_gsalt_units" json:"amount_gsalt_units"`
-	Currency             string            `gorm:"default:GSALT" json:"currency"`
-	ExchangeRateIDR      *decimal.Decimal  `gorm:"column:exchange_rate_idr;type:decimal(10,2);default:1000.00" json:"exchange_rate_idr,omitempty"`
-	PaymentAmount        *int64            `gorm:"column:payment_amount" json:"payment_amount,omitempty"`
-	PaymentCurrency      *string           `gorm:"column:payment_currency;size:5" json:"payment_currency,omitempty"`
-	PaymentMethod        *string           `gorm:"column:payment_method;size:50" json:"payment_method,omitempty"`
-	PaymentInstructions  *string           `gorm:"column:payment_instructions;type:jsonb" json:"payment_instructions,omitempty"`
-	Status               TransactionStatus `json:"status"`
-	Description          *string           `json:"description,omitempty"`
-	RelatedTransactionID *uuid.UUID        `json:"related_transaction_id,omitempty"`
-	SourceAccountID      *uuid.UUID        `json:"source_account_id,omitempty"`
-	DestinationAccountID *uuid.UUID        `json:"destination_account_id,omitempty"`
-	VoucherCode          *string           `json:"voucher_code,omitempty"`
-	ExternalReferenceID  *string           `json:"external_reference_id,omitempty"`
-	CreatedAt            time.Time         `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt            time.Time         `gorm:"autoUpdateTime" json:"updated_at"`
-	CompletedAt          *time.Time        `json:"completed_at,omitempty"`
-	DeletedAt            gorm.DeletedAt    `gorm:"index" json:"deleted_at"`
+	ID                    string            `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	AccountID             uuid.UUID         `json:"account_id" gorm:"type:uuid;not null;index"`
+	Type                  TransactionType   `json:"type" gorm:"type:varchar(20);not null"`
+	AmountGsaltUnits      int64             `json:"amount_gsalt_units" gorm:"not null"`
+	FeeGsaltUnits         int64             `json:"fee_gsalt_units" gorm:"default:0"`
+	TotalAmountGsaltUnits int64             `json:"total_amount_gsalt_units" gorm:"not null"`
+	Currency              string            `json:"currency" gorm:"type:varchar(10);default:'GSALT'"`
+	ExchangeRateIDR       *decimal.Decimal  `json:"exchange_rate_idr,omitempty" gorm:"type:decimal(20,4)"`
+	PaymentAmount         *int64            `json:"payment_amount,omitempty"`
+	PaymentCurrency       *string           `json:"payment_currency,omitempty" gorm:"type:varchar(10)"`
+	PaymentMethod         *string           `json:"payment_method,omitempty" gorm:"type:varchar(50)"`
+	Status                TransactionStatus `json:"status" gorm:"type:varchar(20);not null"`
+	Description           *string           `json:"description,omitempty" gorm:"type:text"`
+	RelatedTransactionID  *uuid.UUID        `json:"related_transaction_id,omitempty"`
+	SourceAccountID       *uuid.UUID        `json:"source_account_id,omitempty"`
+	DestinationAccountID  *uuid.UUID        `json:"destination_account_id,omitempty"`
+	VoucherCode           *string           `json:"voucher_code,omitempty" gorm:"type:varchar(50)"`
+	ExternalReferenceID   *string           `json:"external_reference_id,omitempty" gorm:"type:varchar(255)"`
+	ExternalPaymentID     *string           `json:"external_payment_id,omitempty" gorm:"type:varchar(255)"`
+	PaymentInstructions   *string           `json:"payment_instructions,omitempty" gorm:"type:text"`
+	CreatedAt             time.Time         `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt             time.Time         `json:"updated_at" gorm:"autoUpdateTime"`
+	CompletedAt           *time.Time        `json:"completed_at,omitempty"`
+	Account               Account           `json:"account,omitempty" gorm:"foreignKey:AccountID"`
 }
 
 // Helper method to get GSALT amount as decimal (for display purposes)
@@ -143,13 +147,34 @@ type TransferRequest struct {
 	Description          *string `json:"description,omitempty"`
 }
 
+// PaymentRequest represents a payment request with comprehensive payment method support
 type PaymentRequest struct {
-	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
-	PaymentAmount       *int64  `json:"payment_amount,omitempty"`
-	PaymentCurrency     *string `json:"payment_currency,omitempty"`
-	PaymentMethod       *string `json:"payment_method,omitempty"`
-	Description         *string `json:"description,omitempty"`
-	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
+	AccountID          string  `json:"account_id" validate:"required"`
+	AmountGsaltUnits   int64   `json:"amount_gsalt_units" validate:"required,min=1"`
+	PaymentMethod      string  `json:"payment_method" validate:"required"`
+	CustomerName       *string `json:"customer_name,omitempty"`
+	CustomerEmail      *string `json:"customer_email,omitempty"`
+	CustomerPhone      *string `json:"customer_phone,omitempty"`
+	CustomerAddress    *string `json:"customer_address,omitempty"`
+	RedirectURL        *string `json:"redirect_url,omitempty"`
+	VABank             *string `json:"va_bank,omitempty"`
+	EWalletProvider    *string `json:"ewallet_provider,omitempty"`
+	CreditCardProvider *string `json:"credit_card_provider,omitempty"`
+	RetailProvider     *string `json:"retail_provider,omitempty"`
+	DirectDebitBank    *string `json:"direct_debit_bank,omitempty"`
+}
+
+// PaymentResponse represents a payment response
+type PaymentResponse struct {
+	TransactionID       string     `json:"transaction_id"`
+	Status              string     `json:"status"`
+	PaymentMethod       string     `json:"payment_method"`
+	Amount              int64      `json:"amount"`
+	Fee                 int64      `json:"fee"`
+	TotalAmount         int64      `json:"total_amount"`
+	PaymentURL          string     `json:"payment_url,omitempty"`
+	ExpiryTime          *time.Time `json:"expiry_time,omitempty"`
+	PaymentInstructions string     `json:"payment_instructions,omitempty"`
 }
 
 type ConfirmPaymentRequest struct {
@@ -158,4 +183,33 @@ type ConfirmPaymentRequest struct {
 
 type RejectPaymentRequest struct {
 	Reason *string `json:"reason,omitempty"`
+}
+
+// WithdrawalRequest represents a request to withdraw GSALT to bank account
+type WithdrawalRequest struct {
+	AmountGsalt         string  `json:"amount_gsalt" validate:"required"`
+	BankCode            string  `json:"bank_code" validate:"required"`
+	AccountNumber       string  `json:"account_number" validate:"required"`
+	RecipientName       string  `json:"recipient_name" validate:"required"`
+	Description         *string `json:"description,omitempty"`
+	ExternalReferenceID *string `json:"external_reference_id,omitempty"`
+}
+
+// BankListResponse represents available banks for withdrawal
+type BankListResponse struct {
+	BankCode    string `json:"bank_code"`
+	BankName    string `json:"bank_name"`
+	Available   bool   `json:"available"`
+	MinAmount   int64  `json:"min_amount"`
+	MaxAmount   int64  `json:"max_amount"`
+	Fee         int64  `json:"fee"`
+	Maintenance bool   `json:"maintenance"`
+}
+
+// WithdrawalResponse represents withdrawal transaction response
+type WithdrawalResponse struct {
+	Transaction    *Transaction `json:"transaction"`
+	DisbursementID *string      `json:"disbursement_id,omitempty"`
+	EstimatedTime  string       `json:"estimated_time"`
+	Status         string       `json:"status"`
 }

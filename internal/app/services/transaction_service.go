@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,26 +14,28 @@ import (
 	"gorm.io/gorm"
 )
 
-// Xendit payment method constants for compatibility
+// Flip payment method constants for compatibility
 const (
-	XenditPaymentMethodQRIS           = "QRIS"
-	XenditPaymentMethodVirtualAccount = "VIRTUAL_ACCOUNT"
-	XenditPaymentMethodEWallet        = "EWALLET"
+	FlipPaymentMethodQRIS           = "QRIS"
+	FlipPaymentMethodVirtualAccount = "VA"
+	FlipPaymentMethodEWallet        = "EWALLET"
 )
 
 type TransactionService struct {
 	db             *gorm.DB
 	validator      *infrastructures.Validator
 	accountService *AccountService
-	xenditService  *XenditService
+	flipService    *FlipService
+	limits         TransactionLimits
 }
 
-func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService, xenditService *XenditService) *TransactionService {
+func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService, flipService *FlipService) *TransactionService {
 	return &TransactionService{
 		db:             db,
 		validator:      validator,
 		accountService: accountService,
-		xenditService:  xenditService,
+		flipService:    flipService,
+		limits:         defaultLimits,
 	}
 }
 
@@ -435,49 +438,75 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 			return errors.NewInternalServerError(err, "Failed to create topup transaction")
 		}
 
-		// For external payments, create Xendit payment request
-		if isExternalPayment && s.xenditService != nil {
-			var xenditPaymentMethod models.PaymentMethod = models.PaymentMethodQRIS // Default to QRIS
+		// For external payments, create Flip payment request
+		if isExternalPayment && s.flipService != nil {
+			var flipPaymentMethod models.FlipPaymentMethod = models.FlipPaymentMethodQRIS // Default to QRIS
 			if paymentMethod != nil {
 				switch *paymentMethod {
 				case "QRIS":
-					xenditPaymentMethod = models.PaymentMethodQRIS
+					flipPaymentMethod = models.FlipPaymentMethodQRIS
 				case "BANK_TRANSFER":
-					xenditPaymentMethod = models.PaymentMethodVirtualAccount
+					flipPaymentMethod = models.FlipPaymentMethodVirtualAccount
 				case "EWALLET":
-					xenditPaymentMethod = models.PaymentMethodEWallet
+					flipPaymentMethod = models.FlipPaymentMethodEWallet
 				}
 			}
 
 			// Get account info for customer details
 			var account models.Account
-			if err := tx.Where("id = ?", accountUUID).First(&account).Error; err != nil {
+			if err := tx.Where("connect_id = ?", accountUUID).First(&account).Error; err != nil {
 				return errors.NewInternalServerError(err, "Failed to get account details")
 			}
 
-			// Create payment request with Xendit
-			paymentResp, err := s.xenditService.CreateTopupPayment(
+			// Create payment request data with V3 features
+			transactionIDStr := transaction.ID
+			paymentData := models.FlipPaymentRequestData{
+				TransactionID:         transactionIDStr,
+				Title:                 fmt.Sprintf("GSALT Topup - %s", transactionIDStr),
+				Amount:                *paymentAmount,
+				ExpiryHours:           24, // 24 hours expiry
+				PaymentMethod:         flipPaymentMethod,
+				ReferenceID:           &transactionIDStr, // Use transaction ID as reference
+				ChargeFee:             false,             // Don't charge additional fee to customer
+				IsAddressRequired:     false,             // Address not required for topup
+				IsPhoneNumberRequired: true,              // Phone number required for verification
+			}
+
+			// Set customer information from account if available
+			customerName := account.ConnectID.String()
+			paymentData.CustomerName = &customerName
+
+			// Add item details for better payment description
+			paymentData.ItemDetails = []models.ItemDetail{
+				{
+					Name:     fmt.Sprintf("GSALT Topup - %d GSALT", amountGsaltUnits/100),
+					Price:    *paymentAmount,
+					Quantity: 1,
+					Desc:     fmt.Sprintf("Topup %d GSALT to account %s", amountGsaltUnits/100, account.ConnectID.String()),
+				},
+			}
+
+			// Create payment request with Flip V3
+			paymentResp, err := s.flipService.CreateBill(
 				context.Background(),
-				transaction.ID.String(),
-				*paymentAmount,
-				xenditPaymentMethod,
-				&account,
+				paymentData,
 			)
 			if err != nil {
-				return errors.NewInternalServerError(err, "Failed to create payment request with Xendit")
+				return errors.NewInternalServerError(err, "Failed to create payment request with Flip")
 			}
 
 			// Convert payment response to JSON for storage
-			paymentInstructionsJSON, err := s.xenditService.ConvertPaymentResponseToJSON(paymentResp)
+			paymentInstructionsJSON, err := s.flipService.ConvertPaymentResponseToJSON(paymentResp)
 			if err != nil {
 				return errors.NewInternalServerError(err, "Failed to convert payment instructions to JSON")
 			}
 
-			// Update transaction with Xendit payment request ID and payment instructions
-			transaction.ExternalReferenceID = &paymentResp.PaymentRequestID
+			// Update transaction with Flip bill ID and payment instructions
+			billID := fmt.Sprintf("%d", paymentResp.BillID)
+			transaction.ExternalReferenceID = &billID
 			transaction.PaymentInstructions = &paymentInstructionsJSON
 			if err := tx.Save(transaction).Error; err != nil {
-				return errors.NewInternalServerError(err, "Failed to update transaction with Xendit payment data")
+				return errors.NewInternalServerError(err, "Failed to update transaction with Flip payment data")
 			}
 		}
 
@@ -509,7 +538,7 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 func (s *TransactionService) updateAccountBalance(tx *gorm.DB, accountID uuid.UUID, amountGsaltUnits int64) error {
 	// Lock and get account
 	var account models.Account
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", accountID).First(&account).Error; err != nil {
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("connect_id = ?", accountID).First(&account).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return errors.NewNotFoundError("Account not found")
 		}
@@ -581,14 +610,18 @@ func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId stri
 
 		// Create transfer out transaction
 		transferOut = &models.Transaction{
-			AccountID:            sourceAccount.ConnectID,
-			Type:                 models.TransactionTypeTransferOut,
-			AmountGsaltUnits:     amountGsaltUnits,
-			Currency:             "GSALT",
-			Status:               models.TransactionStatusCompleted,
-			Description:          description,
-			DestinationAccountID: &destAccount.ConnectID,
-			CompletedAt:          &now,
+			ID:                    uuid.New().String(),
+			AccountID:             sourceAccount.ConnectID,
+			Type:                  models.TransactionTypeTransferOut,
+			AmountGsaltUnits:      amountGsaltUnits,
+			TotalAmountGsaltUnits: amountGsaltUnits,
+			Currency:              "GSALT",
+			Status:                models.TransactionStatusCompleted,
+			Description:           description,
+			DestinationAccountID:  &destAccount.ConnectID,
+			CompletedAt:           &now,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 
 		if err := tx.Create(transferOut).Error; err != nil {
@@ -596,16 +629,21 @@ func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId stri
 		}
 
 		// Create transfer in transaction
+		transferOutID, _ := uuid.Parse(transferOut.ID)
 		transferIn = &models.Transaction{
-			AccountID:            destAccount.ConnectID,
-			Type:                 models.TransactionTypeTransferIn,
-			AmountGsaltUnits:     amountGsaltUnits,
-			Currency:             "GSALT",
-			Status:               models.TransactionStatusCompleted,
-			Description:          description,
-			SourceAccountID:      &sourceAccount.ConnectID,
-			RelatedTransactionID: &transferOut.ID,
-			CompletedAt:          &now,
+			ID:                    uuid.New().String(),
+			AccountID:             destAccount.ConnectID,
+			Type:                  models.TransactionTypeTransferIn,
+			AmountGsaltUnits:      amountGsaltUnits,
+			TotalAmountGsaltUnits: amountGsaltUnits,
+			Currency:              "GSALT",
+			Status:                models.TransactionStatusCompleted,
+			Description:           description,
+			SourceAccountID:       &sourceAccount.ConnectID,
+			RelatedTransactionID:  &transferOutID,
+			CompletedAt:           &now,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 
 		if err := tx.Create(transferIn).Error; err != nil {
@@ -613,7 +651,8 @@ func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId stri
 		}
 
 		// Update related transaction ID
-		transferOut.RelatedTransactionID = &transferIn.ID
+		transferInID, _ := uuid.Parse(transferIn.ID)
+		transferOut.RelatedTransactionID = &transferInID
 		if err := tx.Save(transferOut).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to update transfer out transaction")
 		}
@@ -640,134 +679,146 @@ func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId stri
 	return transferOut, transferIn, nil
 }
 
-func (s *TransactionService) ProcessPayment(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethod *string, description *string, externalRefId *string) (*models.Transaction, error) {
-	// Parse UUID first
-	accountUUID, err := uuid.Parse(accountId)
+// ProcessPayment processes external payment (QRIS, Bank Transfer, E-wallet, Credit Card, etc.)
+func (s *TransactionService) ProcessPayment(request models.PaymentRequest) (models.PaymentResponse, error) {
+	// Validate request
+	if err := s.validator.Validate(request); err != nil {
+		return models.PaymentResponse{}, err
+	}
+
+	// Get account to validate
+	account, err := s.accountService.GetAccount(request.AccountID)
 	if err != nil {
-		return nil, errors.NewBadRequestError("Invalid account ID format")
+		return models.PaymentResponse{}, fmt.Errorf("account not found: %w", err)
 	}
 
-	// Validate transaction amount
-	if err := s.validateTransactionAmount(models.TransactionTypePayment, amountGsaltUnits); err != nil {
-		return nil, err
-	}
-
-	// Check daily limits
-	if err := s.checkDailyLimits(accountUUID, models.TransactionTypePayment, amountGsaltUnits); err != nil {
-		return nil, err
-	}
-
-	// Check idempotency
-	if existingTxn, err := s.checkIdempotency(externalRefId); err != nil {
-		return nil, err
-	} else if existingTxn != nil {
-		return existingTxn, nil // Return existing transaction
-	}
-
-	var transaction *models.Transaction
-	now := time.Now()
-	exchangeRate := decimal.NewFromFloat(1000.00) // Default: 1000 IDR = 1 GSALT
-
-	// Auto-calculate payment_amount if payment_currency is provided but payment_amount is not
-	// This ensures compliance with the database constraint chk_payment_fields_consistency
-	if paymentCurrency != nil && paymentAmount == nil {
-		// Calculate payment amount based on GSALT amount and exchange rate
-		gsaltDecimal := decimal.NewFromInt(amountGsaltUnits).Div(decimal.NewFromInt(100)) // Convert units to GSALT
-
-		// Calculate payment amount based on currency
-		switch *paymentCurrency {
-		case "IDR":
-			calculatedAmount := gsaltDecimal.Mul(exchangeRate).IntPart()
-			paymentAmount = &calculatedAmount
-		case "GSALT":
-			calculatedAmount := amountGsaltUnits
-			paymentAmount = &calculatedAmount
-		default:
-			// For other currencies (USD, EUR, SGD), use IDR as default for now
-			// TODO: Implement proper exchange rates for other currencies
-			calculatedAmount := gsaltDecimal.Mul(exchangeRate).IntPart()
-			paymentAmount = &calculatedAmount
-		}
-	}
-
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock and verify account with SELECT FOR UPDATE
-		var account models.Account
-		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("connect_id = ?", accountUUID).First(&account).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return errors.NewNotFoundError("Account not found")
-			}
-			return errors.NewInternalServerError(err, "Failed to get account")
-		}
-
-		// For GSALT_BALANCE payment method, check sufficient balance
-		if paymentMethod != nil && *paymentMethod == "GSALT_BALANCE" {
-			if !s.hasSufficientBalance(account.Balance, amountGsaltUnits) {
-				return errors.NewBadRequestError("Insufficient balance [" + ErrCodeInsufficientBalance + "]")
-			}
-		}
-
-		// Create payment transaction
-		transaction = &models.Transaction{
-			AccountID:           account.ConnectID,
-			Type:                models.TransactionTypePayment,
-			AmountGsaltUnits:    amountGsaltUnits,
-			Currency:            "GSALT",
-			ExchangeRateIDR:     &exchangeRate,
-			PaymentAmount:       paymentAmount,
-			PaymentCurrency:     paymentCurrency,
-			PaymentMethod:       paymentMethod,
-			Status:              models.TransactionStatusCompleted,
-			Description:         description,
-			ExternalReferenceID: externalRefId,
-			CompletedAt:         &now,
-		}
-
-		if err := tx.Create(transaction).Error; err != nil {
-			return errors.NewInternalServerError(err, "Failed to create payment transaction")
-		}
-
-		// Update account balance only if paying with GSALT_BALANCE
-		if paymentMethod != nil && *paymentMethod == "GSALT_BALANCE" {
-			account.Balance -= amountGsaltUnits
-			if err := tx.Save(&account).Error; err != nil {
-				return errors.NewInternalServerError(err, "Failed to update account balance")
-			}
-		}
-
-		return nil
-	})
-
+	// Calculate fee based on payment method and amount
+	fee, err := s.calculateFlipFee(request.PaymentMethod, request.AmountGsaltUnits)
 	if err != nil {
-		return nil, err
+		return models.PaymentResponse{}, fmt.Errorf("failed to calculate fee: %w", err)
 	}
 
-	return transaction, nil
+	// Total amount including fee (user pays the fee)
+	totalAmountGsalt := request.AmountGsaltUnits + fee
+	totalAmountIDR := totalAmountGsalt * 1000 // Convert to IDR
+
+	// Create transaction record first
+	transaction := models.Transaction{
+		ID:                    generateTransactionID(),
+		AccountID:             account.ConnectID,
+		Type:                  models.TransactionTypeTopup,
+		Status:                models.TransactionStatusPending,
+		AmountGsaltUnits:      request.AmountGsaltUnits,
+		FeeGsaltUnits:         fee,
+		TotalAmountGsaltUnits: totalAmountGsalt,
+		PaymentMethod:         &request.PaymentMethod,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
+	}
+
+	if err := s.db.Create(&transaction).Error; err != nil {
+		return models.PaymentResponse{}, fmt.Errorf("failed to create transaction: %w", err)
+	}
+
+	// Create Flip payment bill with comprehensive data
+	flipData := models.FlipPaymentRequestData{
+		TransactionID:   transaction.ID,
+		Title:           fmt.Sprintf("GSALT Topup - %d GSALT (+ %d GSALT fee)", request.AmountGsaltUnits, fee),
+		Amount:          totalAmountIDR,
+		ExpiryHours:     24,
+		PaymentMethod:   s.mapToFlipPaymentMethod(request.PaymentMethod),
+		CustomerName:    request.CustomerName,
+		CustomerEmail:   request.CustomerEmail,
+		CustomerPhone:   request.CustomerPhone,
+		CustomerAddress: request.CustomerAddress,
+		RedirectURL:     request.RedirectURL,
+		ReferenceID:     &transaction.ID,
+		ChargeFee:       true, // Fee charged to user
+		ItemDetails: []models.ItemDetail{
+			{
+				ID:       "gsalt_topup",
+				Name:     "GSALT Token Topup",
+				Price:    request.AmountGsaltUnits * 1000,
+				Quantity: 1,
+				Desc:     fmt.Sprintf("Purchase of %d GSALT tokens", request.AmountGsaltUnits),
+			},
+			{
+				ID:       "flip_fee",
+				Name:     "Payment Processing Fee",
+				Price:    fee * 1000,
+				Quantity: 1,
+				Desc:     "Flip payment processing fee",
+			},
+		},
+		IsAddressRequired:     request.CustomerAddress != nil,
+		IsPhoneNumberRequired: request.CustomerPhone != nil,
+	}
+
+	// Set specific payment method configurations
+	s.setPaymentMethodSpecificData(&flipData, request)
+
+	// Create bill via Flip API
+	billResponse, err := s.flipService.CreateBill(context.Background(), flipData)
+	if err != nil {
+		// Rollback transaction on failure
+		s.db.Delete(&transaction)
+		return models.PaymentResponse{}, fmt.Errorf("failed to create Flip bill: %w", err)
+	}
+
+	// Update transaction with external payment ID
+	transaction.ExternalPaymentID = &billResponse.LinkURL
+	if err := s.db.Save(&transaction).Error; err != nil {
+		return models.PaymentResponse{}, fmt.Errorf("failed to update transaction: %w", err)
+	}
+
+	paymentMethodStr := ""
+	if transaction.PaymentMethod != nil {
+		paymentMethodStr = *transaction.PaymentMethod
+	}
+
+	return models.PaymentResponse{
+		TransactionID:       transaction.ID,
+		Status:              string(transaction.Status),
+		PaymentMethod:       paymentMethodStr,
+		Amount:              request.AmountGsaltUnits,
+		Fee:                 fee,
+		TotalAmount:         totalAmountGsalt,
+		PaymentURL:          billResponse.LinkURL,
+		ExpiryTime:          billResponse.ExpiryTime,
+		PaymentInstructions: s.getPaymentInstructions(request.PaymentMethod),
+	}, nil
 }
 
 // Helper function to validate transaction amounts (in GSALT units)
 func (s *TransactionService) validateTransactionAmount(txnType models.TransactionType, amountGsaltUnits int64) error {
 	switch txnType {
 	case models.TransactionTypeTopup:
-		if amountGsaltUnits < defaultLimits.MinTopupAmount {
-			return errors.NewBadRequestError("Topup amount below minimum limit [" + ErrCodeAmountBelowMinimum + "]")
+		if amountGsaltUnits < s.limits.MinTopupAmount {
+			return fmt.Errorf("topup amount must be at least %d GSALT units", s.limits.MinTopupAmount)
 		}
-		if amountGsaltUnits > defaultLimits.MaxTopupAmount {
-			return errors.NewBadRequestError("Topup amount exceeds maximum limit [" + ErrCodeAmountAboveMaximum + "]")
+		if amountGsaltUnits > s.limits.MaxTopupAmount {
+			return fmt.Errorf("topup amount cannot exceed %d GSALT units", s.limits.MaxTopupAmount)
 		}
 	case models.TransactionTypeTransferOut:
-		if amountGsaltUnits < defaultLimits.MinTransferAmount {
-			return errors.NewBadRequestError("Transfer amount below minimum limit [" + ErrCodeAmountBelowMinimum + "]")
+		if amountGsaltUnits < s.limits.MinTransferAmount {
+			return fmt.Errorf("transfer amount must be at least %d GSALT units", s.limits.MinTransferAmount)
 		}
-		if amountGsaltUnits > defaultLimits.MaxTransferAmount {
-			return errors.NewBadRequestError("Transfer amount exceeds maximum limit [" + ErrCodeAmountAboveMaximum + "]")
+		if amountGsaltUnits > s.limits.MaxTransferAmount {
+			return fmt.Errorf("transfer amount cannot exceed %d GSALT units", s.limits.MaxTransferAmount)
 		}
 	case models.TransactionTypePayment:
-		if amountGsaltUnits < defaultLimits.MinPaymentAmount {
-			return errors.NewBadRequestError("Payment amount below minimum limit [" + ErrCodeAmountBelowMinimum + "]")
+		if amountGsaltUnits < s.limits.MinPaymentAmount {
+			return fmt.Errorf("payment amount must be at least %d GSALT units", s.limits.MinPaymentAmount)
 		}
-		if amountGsaltUnits > defaultLimits.MaxPaymentAmount {
-			return errors.NewBadRequestError("Payment amount exceeds maximum limit [" + ErrCodeAmountAboveMaximum + "]")
+		if amountGsaltUnits > s.limits.MaxPaymentAmount {
+			return fmt.Errorf("payment amount cannot exceed %d GSALT units", s.limits.MaxPaymentAmount)
+		}
+	case models.TransactionTypeWithdrawal:
+		if amountGsaltUnits < s.limits.MinTransferAmount {
+			return fmt.Errorf("withdrawal amount must be at least %d GSALT units", s.limits.MinTransferAmount)
+		}
+		if amountGsaltUnits > s.limits.MaxTransferAmount {
+			return fmt.Errorf("withdrawal amount cannot exceed %d GSALT units", s.limits.MaxTransferAmount)
 		}
 	}
 	return nil
@@ -793,6 +844,12 @@ func (s *TransactionService) checkDailyLimits(accountId uuid.UUID, txnType model
 		s.db.Model(&models.Transaction{}).
 			Where("account_id = ? AND type = ? AND created_at >= ? AND created_at < ? AND status = ?",
 				accountId, models.TransactionTypePayment, today, tomorrow, models.TransactionStatusCompleted).
+			Select("COALESCE(SUM(amount_gsalt_units), 0)").Scan(&totalToday)
+	case models.TransactionTypeWithdrawal:
+		dailyLimit = defaultLimits.DailyTransferLimit
+		s.db.Model(&models.Transaction{}).
+			Where("account_id = ? AND type = ? AND created_at >= ? AND created_at < ? AND status = ?",
+				accountId, models.TransactionTypeWithdrawal, today, tomorrow, models.TransactionStatusCompleted).
 			Select("COALESCE(SUM(amount_gsalt_units), 0)").Scan(&totalToday)
 	default:
 		return nil // No daily limit for other transaction types
@@ -997,14 +1054,18 @@ func (s *TransactionService) ProcessGiftOut(sourceAccountId, destAccountId strin
 
 		// Create gift out transaction
 		giftOut = &models.Transaction{
-			AccountID:            sourceAccount.ConnectID,
-			Type:                 models.TransactionTypeGiftOut,
-			AmountGsaltUnits:     amountGsaltUnits,
-			Currency:             "GSALT",
-			Status:               models.TransactionStatusCompleted,
-			Description:          description,
-			DestinationAccountID: &destAccount.ConnectID,
-			CompletedAt:          &now,
+			ID:                    uuid.New().String(),
+			AccountID:             sourceAccount.ConnectID,
+			Type:                  models.TransactionTypeGiftOut,
+			AmountGsaltUnits:      amountGsaltUnits,
+			TotalAmountGsaltUnits: amountGsaltUnits,
+			Currency:              "GSALT",
+			Status:                models.TransactionStatusCompleted,
+			Description:           description,
+			DestinationAccountID:  &destAccount.ConnectID,
+			CompletedAt:           &now,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 
 		if err := tx.Create(giftOut).Error; err != nil {
@@ -1012,16 +1073,21 @@ func (s *TransactionService) ProcessGiftOut(sourceAccountId, destAccountId strin
 		}
 
 		// Create gift in transaction
+		giftOutID, _ := uuid.Parse(giftOut.ID)
 		giftIn = &models.Transaction{
-			AccountID:            destAccount.ConnectID,
-			Type:                 models.TransactionTypeGiftIn,
-			AmountGsaltUnits:     amountGsaltUnits,
-			Currency:             "GSALT",
-			Status:               models.TransactionStatusCompleted,
-			Description:          description,
-			SourceAccountID:      &sourceAccount.ConnectID,
-			RelatedTransactionID: &giftOut.ID,
-			CompletedAt:          &now,
+			ID:                    uuid.New().String(),
+			AccountID:             destAccount.ConnectID,
+			Type:                  models.TransactionTypeGiftIn,
+			AmountGsaltUnits:      amountGsaltUnits,
+			TotalAmountGsaltUnits: amountGsaltUnits,
+			Currency:              "GSALT",
+			Status:                models.TransactionStatusCompleted,
+			Description:           description,
+			SourceAccountID:       &sourceAccount.ConnectID,
+			RelatedTransactionID:  &giftOutID,
+			CompletedAt:           &now,
+			CreatedAt:             now,
+			UpdatedAt:             now,
 		}
 
 		if err := tx.Create(giftIn).Error; err != nil {
@@ -1029,7 +1095,8 @@ func (s *TransactionService) ProcessGiftOut(sourceAccountId, destAccountId strin
 		}
 
 		// Update related transaction ID
-		giftOut.RelatedTransactionID = &giftIn.ID
+		giftInID, _ := uuid.Parse(giftIn.ID)
+		giftOut.RelatedTransactionID = &giftInID
 		if err := tx.Save(giftOut).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to update gift out transaction")
 		}
@@ -1165,4 +1232,374 @@ func (s *TransactionService) RejectPayment(transactionId string, reason *string)
 	}
 
 	return &transaction, nil
+}
+
+// ProcessWithdrawal processes GSALT withdrawal to bank account via Flip disbursement
+func (s *TransactionService) ProcessWithdrawal(accountId string, amountGsaltUnits int64, bankCode, accountNumber, recipientName string, description *string, externalRefId *string) (*models.Transaction, error) {
+	// Parse account ID
+	accountUUID, err := uuid.Parse(accountId)
+	if err != nil {
+		return nil, fmt.Errorf("invalid account ID: %w", err)
+	}
+
+	// Validate withdrawal amount
+	if err := s.validateTransactionAmount(models.TransactionTypeWithdrawal, amountGsaltUnits); err != nil {
+		return nil, err
+	}
+
+	// Check account balance
+	var account models.Account
+	if err := s.db.First(&account, "connect_id = ?", accountUUID).Error; err != nil {
+		return nil, fmt.Errorf("account not found: %w", err)
+	}
+
+	if !s.hasSufficientBalance(account.Balance, amountGsaltUnits) {
+		return nil, fmt.Errorf("insufficient balance")
+	}
+
+	// Check daily limits
+	if err := s.checkDailyLimits(accountUUID, models.TransactionTypeWithdrawal, amountGsaltUnits); err != nil {
+		return nil, err
+	}
+
+	// Check for idempotency if external reference ID is provided
+	if externalRefId != nil {
+		existingTxn, err := s.checkIdempotency(externalRefId)
+		if err != nil {
+			return nil, err
+		}
+		if existingTxn != nil {
+			return existingTxn, nil
+		}
+	}
+
+	// Validate bank account first
+	ctx := context.Background()
+	bankInquiry, err := s.flipService.ValidateBankAccount(ctx, accountNumber, bankCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate bank account: %w", err)
+	}
+
+	// Check if account name matches (optional validation)
+	if bankInquiry.Status != "SUCCESS" {
+		return nil, fmt.Errorf("invalid bank account: %s", bankInquiry.Status)
+	}
+
+	// Check disbursement service availability
+	available, err := s.flipService.CheckDisbursementAvailability(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check disbursement availability: %w", err)
+	}
+	if !available {
+		return nil, fmt.Errorf("disbursement service is currently unavailable due to maintenance")
+	}
+
+	// Begin database transaction
+	tx := s.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create withdrawal transaction
+	transactionID := uuid.New().String()
+	withdrawalDesc := fmt.Sprintf("Withdrawal to %s - %s (%s)", bankCode, accountNumber, recipientName)
+	if description != nil && *description != "" {
+		withdrawalDesc = fmt.Sprintf("%s - %s", withdrawalDesc, *description)
+	}
+
+	transaction := models.Transaction{
+		ID:                    transactionID,
+		AccountID:             accountUUID,
+		Type:                  models.TransactionTypeWithdrawal,
+		AmountGsaltUnits:      amountGsaltUnits,
+		TotalAmountGsaltUnits: amountGsaltUnits,
+		Description:           &withdrawalDesc,
+		Status:                models.TransactionStatusPending,
+		ExternalReferenceID:   externalRefId,
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
+	}
+
+	if err := tx.Create(&transaction).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to create withdrawal transaction: %w", err)
+	}
+
+	// Update account balance (deduct withdrawal amount)
+	if err := s.updateAccountBalance(tx, accountUUID, -amountGsaltUnits); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to update account balance: %w", err)
+	}
+
+	// Commit database transaction first
+	if err := tx.Commit().Error; err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Convert GSALT to IDR for disbursement
+	amountIDR := s.flipService.ConvertGSALTToIDR(amountGsaltUnits)
+
+	// Create disbursement request
+	disbursementReq := models.GSALTDisbursementRequest{
+		TransactionID:  transactionID,
+		RecipientName:  recipientName,
+		AccountNumber:  accountNumber,
+		BankCode:       bankCode,
+		AmountGSALT:    amountGsaltUnits,
+		AmountIDR:      amountIDR,
+		Description:    withdrawalDesc,
+		IdempotencyKey: transactionID,
+	}
+
+	// Create disbursement via Flip
+	disbursementResp, err := s.flipService.CreateGSALTDisbursement(ctx, disbursementReq)
+	if err != nil {
+		// If disbursement fails, we need to reverse the balance deduction
+		reverseTx := s.db.Begin()
+		s.updateAccountBalance(reverseTx, accountUUID, amountGsaltUnits) // Add back the amount
+
+		// Update transaction status to failed
+		s.db.Model(&transaction).Updates(models.Transaction{
+			Status:    models.TransactionStatusFailed,
+			UpdatedAt: time.Now(),
+		})
+
+		reverseTx.Commit()
+		return nil, fmt.Errorf("failed to create disbursement: %w", err)
+	}
+
+	// Update transaction with disbursement information
+	updateData := models.Transaction{
+		Status:    models.TransactionStatusProcessing,
+		UpdatedAt: time.Now(),
+	}
+
+	// Store disbursement ID as external payment ID
+	disbursementIDStr := fmt.Sprintf("%d", disbursementResp.DisbursementID)
+	updateData.ExternalPaymentID = &disbursementIDStr
+
+	if err := s.db.Model(&transaction).Updates(updateData).Error; err != nil {
+		return nil, fmt.Errorf("failed to update transaction with disbursement info: %w", err)
+	}
+
+	// Refresh transaction data
+	if err := s.db.First(&transaction, "id = ?", transactionID).Error; err != nil {
+		return nil, fmt.Errorf("failed to refresh transaction: %w", err)
+	}
+
+	return &transaction, nil
+}
+
+// GetSupportedBanksForWithdrawal retrieves list of banks that support withdrawal
+func (s *TransactionService) GetSupportedBanksForWithdrawal(ctx context.Context) ([]models.BankListResponse, error) {
+	// Get banks from Flip
+	flipBanks, err := s.flipService.GetSupportedBanks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get supported banks: %w", err)
+	}
+
+	// Convert to our response format
+	var bankList []models.BankListResponse
+	for _, bank := range flipBanks {
+		bankResp := models.BankListResponse{
+			BankCode:    bank.BankCode,
+			BankName:    bank.Name,
+			Available:   bank.Status == "OPERATIONAL",
+			MinAmount:   bank.MinAmount,
+			MaxAmount:   bank.MaxAmount,
+			Fee:         bank.Fee,
+			Maintenance: bank.Status != "OPERATIONAL",
+		}
+		bankList = append(bankList, bankResp)
+	}
+
+	return bankList, nil
+}
+
+// CheckWithdrawalStatus checks the status of a withdrawal transaction
+func (s *TransactionService) CheckWithdrawalStatus(transactionId string) (*models.WithdrawalResponse, error) {
+	// Get transaction from database
+	transaction, err := s.GetTransaction(transactionId)
+	if err != nil {
+		return nil, err
+	}
+
+	if transaction.Type != models.TransactionTypeWithdrawal {
+		return nil, fmt.Errorf("transaction is not a withdrawal")
+	}
+
+	response := &models.WithdrawalResponse{
+		Transaction:   transaction,
+		EstimatedTime: "1-3 business days",
+		Status:        string(transaction.Status),
+	}
+
+	// If transaction has external payment ID (disbursement ID), add it to response
+	if transaction.ExternalPaymentID != nil {
+		response.DisbursementID = transaction.ExternalPaymentID
+	}
+
+	// Get more detailed status from Flip if available
+	if transaction.ExternalPaymentID != nil {
+		ctx := context.Background()
+		disbursementStatus, err := s.flipService.GetGSALTDisbursementStatus(ctx, transactionId)
+		if err == nil {
+			response.Status = string(disbursementStatus.Status)
+			// Update estimated time based on status
+			switch disbursementStatus.Status {
+			case models.DisbursementStatusPending:
+				response.EstimatedTime = "Processing - 1-3 business days"
+			case models.DisbursementStatusProcessed:
+				response.EstimatedTime = "In progress - within 24 hours"
+			case models.DisbursementStatusDone:
+				response.EstimatedTime = "Completed"
+			case models.DisbursementStatusCancelled:
+				response.EstimatedTime = "Cancelled"
+			}
+		}
+	}
+
+	return response, nil
+}
+
+// ValidateBankAccountForWithdrawal validates bank account before withdrawal
+func (s *TransactionService) ValidateBankAccountForWithdrawal(ctx context.Context, bankCode, accountNumber string) (*models.BankAccountInquiryResponse, error) {
+	return s.flipService.ValidateBankAccount(ctx, accountNumber, bankCode)
+}
+
+// GetWithdrawalBalance gets available balance for withdrawal (considering pending withdrawals)
+func (s *TransactionService) GetWithdrawalBalance(accountId string) (int64, error) {
+	accountUUID, err := uuid.Parse(accountId)
+	if err != nil {
+		return 0, fmt.Errorf("invalid account ID: %w", err)
+	}
+
+	// Get account balance
+	var account models.Account
+	if err := s.db.First(&account, "connect_id = ?", accountUUID).Error; err != nil {
+		return 0, fmt.Errorf("account not found: %w", err)
+	}
+
+	// Calculate pending withdrawal amount
+	var pendingWithdrawals int64
+	s.db.Model(&models.Transaction{}).
+		Where("account_id = ? AND type = ? AND status IN (?)",
+			accountUUID, models.TransactionTypeWithdrawal,
+			[]models.TransactionStatus{models.TransactionStatusPending, models.TransactionStatusProcessing}).
+		Select("COALESCE(SUM(amount_gsalt_units), 0)").Scan(&pendingWithdrawals)
+
+	// Available balance = total balance - pending withdrawals
+	availableBalance := account.Balance - pendingWithdrawals
+	if availableBalance < 0 {
+		availableBalance = 0
+	}
+
+	return availableBalance, nil
+}
+
+// calculateFlipFee calculates the fee for Flip payment based on payment method and amount
+func (s *TransactionService) calculateFlipFee(paymentMethod string, amountGsalt int64) (int64, error) {
+	// Fee structure based on Flip's pricing (in GSALT units)
+	// These are example fees - adjust based on actual Flip pricing
+	switch paymentMethod {
+	case "VA_BCA", "VA_BNI", "VA_BRI", "VA_MANDIRI", "VA_CIMB", "VA_PERMATA", "VA_BSI":
+		return 4, nil // 4 GSALT (4000 IDR) for VA
+	case "QRIS":
+		fee := amountGsalt * 7 / 1000 // 0.7% of amount
+		if fee < 2 {
+			fee = 2 // Minimum 2 GSALT (2000 IDR)
+		}
+		return fee, nil
+	case "EWALLET_OVO", "EWALLET_DANA", "EWALLET_GOPAY", "EWALLET_LINKAJA", "EWALLET_SHOPEEPAY":
+		return 5, nil // 5 GSALT (5000 IDR) for e-wallets
+	case "CREDIT_CARD", "DEBIT_CARD":
+		fee := amountGsalt * 29 / 1000 // 2.9% of amount
+		if fee < 10 {
+			fee = 10 // Minimum 10 GSALT (10000 IDR)
+		}
+		return fee, nil
+	case "RETAIL_ALFAMART", "RETAIL_INDOMARET", "RETAIL_CIRCLEK", "RETAIL_LAWSON":
+		return 5, nil // 5 GSALT (5000 IDR) for retail outlets
+	case "DIRECT_DEBIT":
+		return 3, nil // 3 GSALT (3000 IDR) for direct debit
+	default:
+		return 4, nil // Default fee 4 GSALT
+	}
+}
+
+// mapToFlipPaymentMethod maps internal payment method to Flip payment method
+func (s *TransactionService) mapToFlipPaymentMethod(paymentMethod string) models.FlipPaymentMethod {
+	switch {
+	case strings.HasPrefix(paymentMethod, "VA_"):
+		return models.FlipPaymentMethodVirtualAccount
+	case paymentMethod == "QRIS":
+		return models.FlipPaymentMethodQRIS
+	case strings.HasPrefix(paymentMethod, "EWALLET_"):
+		return models.FlipPaymentMethodEWallet
+	case strings.HasPrefix(paymentMethod, "CREDIT_CARD"):
+		return models.FlipPaymentMethodCreditCard
+	case strings.HasPrefix(paymentMethod, "DEBIT_CARD"):
+		return models.FlipPaymentMethodDebitCard
+	case strings.HasPrefix(paymentMethod, "RETAIL_"):
+		return models.FlipPaymentMethodRetailOutlet
+	case paymentMethod == "DIRECT_DEBIT":
+		return models.FlipPaymentMethodDirectDebit
+	case paymentMethod == "BANK_TRANSFER":
+		return models.FlipPaymentMethodBankTransfer
+	default:
+		return models.FlipPaymentMethodQRIS
+	}
+}
+
+// setPaymentMethodSpecificData sets specific data based on payment method
+func (s *TransactionService) setPaymentMethodSpecificData(flipData *models.FlipPaymentRequestData, request models.PaymentRequest) {
+	switch {
+	case strings.HasPrefix(request.PaymentMethod, "VA_"):
+		// Extract bank from payment method (e.g., VA_BCA -> bca)
+		bankCode := strings.ToLower(strings.TrimPrefix(request.PaymentMethod, "VA_"))
+		flipData.VABank = (*models.FlipVABank)(&bankCode)
+	case strings.HasPrefix(request.PaymentMethod, "EWALLET_"):
+		// Extract provider from payment method (e.g., EWALLET_OVO -> ovo)
+		provider := strings.ToLower(strings.TrimPrefix(request.PaymentMethod, "EWALLET_"))
+		flipData.EWalletProvider = (*models.FlipEWalletProvider)(&provider)
+	case request.PaymentMethod == "CREDIT_CARD":
+		if request.CreditCardProvider != nil {
+			flipData.CreditCardProvider = (*models.FlipCreditCardProvider)(request.CreditCardProvider)
+		}
+	case strings.HasPrefix(request.PaymentMethod, "RETAIL_"):
+		// Extract provider from payment method (e.g., RETAIL_ALFAMART -> alfamart)
+		provider := strings.ToLower(strings.TrimPrefix(request.PaymentMethod, "RETAIL_"))
+		flipData.RetailProvider = (*models.FlipRetailProvider)(&provider)
+	case request.PaymentMethod == "DIRECT_DEBIT":
+		if request.DirectDebitBank != nil {
+			flipData.DirectDebitBank = (*models.FlipDirectDebitBank)(request.DirectDebitBank)
+		}
+	}
+}
+
+// getPaymentInstructions returns payment instructions based on payment method
+func (s *TransactionService) getPaymentInstructions(paymentMethod string) string {
+	switch {
+	case strings.HasPrefix(paymentMethod, "VA_"):
+		return "Silakan transfer ke nomor Virtual Account yang telah disediakan melalui ATM, mobile banking, atau internet banking."
+	case paymentMethod == "QRIS":
+		return "Scan kode QR menggunakan aplikasi pembayaran digital Anda (GoPay, OVO, DANA, ShopeePay, dll)."
+	case strings.HasPrefix(paymentMethod, "EWALLET_"):
+		return "Bayar menggunakan aplikasi e-wallet yang dipilih. Anda akan diarahkan ke aplikasi tersebut."
+	case paymentMethod == "CREDIT_CARD" || paymentMethod == "DEBIT_CARD":
+		return "Masukkan informasi kartu kredit/debit Anda untuk menyelesaikan pembayaran."
+	case strings.HasPrefix(paymentMethod, "RETAIL_"):
+		return "Kunjungi outlet retail yang dipilih dan berikan kode pembayaran kepada kasir."
+	case paymentMethod == "DIRECT_DEBIT":
+		return "Pembayaran akan langsung didebit dari rekening bank yang terdaftar."
+	default:
+		return "Ikuti instruksi pembayaran yang tersedia di halaman checkout."
+	}
+}
+
+// generateTransactionID generates a unique transaction ID
+func generateTransactionID() string {
+	return fmt.Sprintf("TXN_%d_%s", time.Now().Unix(), uuid.New().String()[:8])
 }

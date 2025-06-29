@@ -335,11 +335,18 @@ func (s *VoucherRedemptionService) RedeemVoucher(accountId, voucherCode string) 
 		return nil, nil, errors.NewInternalServerError(err, "Failed to create voucher redemption transaction")
 	}
 
-	// Create voucher redemption record
+	// Convert transaction ID string to UUID
+	transactionUUID, err := uuid.Parse(transaction.ID)
+	if err != nil {
+		tx.Rollback()
+		return nil, nil, errors.NewInternalServerError(err, "Failed to parse transaction ID")
+	}
+
+	// Create redemption record
 	redemption := &models.VoucherRedemption{
 		VoucherID:     voucher.ID,
 		AccountID:     account.ConnectID,
-		TransactionID: &transaction.ID,
+		TransactionID: &transactionUUID,
 	}
 
 	if err := tx.Create(redemption).Error; err != nil {

@@ -27,24 +27,32 @@ func NewTransactionHandler(transactionService *services.TransactionService, auth
 
 func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	transactionGroup := router.Group("/transactions")
+	// Public routes (no auth required)
+	transactionGroup.Post("/webhook/flip", h.HandleFlipWebhook)
 
-	transactionGroup.Post("/", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.CreateTransaction)
-	transactionGroup.Get("/me", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.GetMyTransactions)
-	transactionGroup.Get("/:id", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.GetTransaction)
-	transactionGroup.Patch("/:id", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.UpdateTransaction)
+	// Protected routes (auth required)
+	auth := transactionGroup.Group("/", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount)
 
-	// Payment operations
-	transactionGroup.Post("/topup", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessTopup)
-	transactionGroup.Post("/transfer", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessTransfer)
-	transactionGroup.Post("/payment", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ProcessPayment)
+	// Transaction CRUD
+	auth.Post("/", h.CreateTransaction)
+	auth.Get("/:id", h.GetTransaction)
+	auth.Get("/", h.GetMyTransactions)
+	auth.Put("/:id", h.UpdateTransaction)
 
-	// Payment confirmation/rejection (admin or external)
-	transactionGroup.Post("/:id/confirm", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.ConfirmPayment)
-	transactionGroup.Post("/:id/reject", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount, h.RejectPayment)
+	// Transaction operations
+	auth.Post("/topup", h.ProcessTopup)
+	auth.Post("/transfer", h.ProcessTransfer)
+	auth.Post("/payment", h.ProcessPayment)
+	auth.Get("/payment/methods", h.GetSupportedPaymentMethods)
+	auth.Post("/:id/confirm", h.ConfirmPayment)
+	auth.Post("/:id/reject", h.RejectPayment)
 
-	// Webhook routes (no authentication required)
-	webhookGroup := router.Group("/webhooks")
-	webhookGroup.Post("/xendit/payment", h.HandleXenditWebhook)
+	// Withdrawal operations
+	auth.Post("/withdrawal", h.ProcessWithdrawal)
+	auth.Get("/withdrawal/banks", h.GetSupportedBanksForWithdrawal)
+	auth.Get("/withdrawal/balance", h.GetWithdrawalBalance)
+	auth.Post("/withdrawal/:id/status", h.CheckWithdrawalStatus)
+	auth.Post("/withdrawal/validate-bank-account", h.ValidateBankAccountForWithdrawal)
 }
 
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
@@ -194,34 +202,25 @@ func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 }
 
 func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
-	account := c.Locals("account").(*models.Account)
-
 	var req models.PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	// Convert GSALT amount to units (1 GSALT = 100 units)
-	amountGsalt, err := decimal.NewFromString(req.AmountGsalt)
-	if err != nil {
-		return pkg.ErrorResponse(c, err)
+	// Get account from context
+	account := c.Locals("account").(*models.Account)
+	if account == nil {
+		return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Account not found in context"))
 	}
-	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
+	req.AccountID = account.ConnectID.String()
 
-	transaction, err := h.transactionService.ProcessPayment(
-		account.ConnectID.String(),
-		amountGsaltUnits,
-		req.PaymentAmount,
-		req.PaymentCurrency,
-		req.PaymentMethod,
-		req.Description,
-		req.ExternalReferenceID,
-	)
+	// Process payment
+	response, err := h.transactionService.ProcessPayment(req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	return pkg.SuccessResponse(c, transaction)
+	return pkg.SuccessResponse(c, response)
 }
 
 func (h *TransactionHandler) ConfirmPayment(c *fiber.Ctx) error {
@@ -256,42 +255,254 @@ func (h *TransactionHandler) RejectPayment(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, transaction)
 }
 
-// HandleXenditWebhook handles webhook notifications from Xendit
-func (h *TransactionHandler) HandleXenditWebhook(c *fiber.Ctx) error {
-	var payload models.XenditWebhookPayload
+// HandleFlipWebhook handles webhook notifications from Flip
+func (h *TransactionHandler) HandleFlipWebhook(c *fiber.Ctx) error {
+	var payload models.FlipWebhookPayload
 	if err := c.BodyParser(&payload); err != nil {
 		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid webhook payload"))
 	}
 
 	// TODO: Verify webhook signature
 	// callbackToken := c.Get("X-CALLBACK-TOKEN")
-	// if !verifyXenditSignature(callbackToken, payload) {
+	// if !verifyFlipSignature(callbackToken, payload) {
 	//     return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Invalid webhook signature"))
 	// }
 
-	// Process webhook based on event type
-	switch payload.Event {
-	case "payment.completed":
+	// Process webhook based on payment status
+	// For Flip, we need to extract transaction ID from bill_title or use bill_link_id
+	transactionID := payload.BillTitle // Assuming we store transaction ID in bill title
+	billID := fmt.Sprintf("%d", payload.BillLinkID)
+
+	switch payload.Status {
+	case models.FlipStatusSuccessful:
 		// Confirm the payment
-		_, err := h.transactionService.ConfirmPayment(payload.TransactionID, &payload.PaymentRequestID)
+		_, err := h.transactionService.ConfirmPayment(transactionID, &billID)
 		if err != nil {
-			// Log error but don't return error to Xendit to prevent retries
+			// Log error but don't return error to Flip to prevent retries
 			// In production, you might want to use a proper logger
-			fmt.Printf("Failed to confirm payment for transaction %s: %v\n", payload.TransactionID, err)
+			fmt.Printf("Failed to confirm payment for transaction %s: %v\n", transactionID, err)
 		}
-	case "payment.failed", "payment.expired":
+	case models.FlipStatusFailed, models.FlipStatusExpired, models.FlipStatusCancelled:
 		// Reject the payment
-		reason := fmt.Sprintf("Payment %s in Xendit", payload.Status)
-		_, err := h.transactionService.RejectPayment(payload.TransactionID, &reason)
+		reason := fmt.Sprintf("Payment %s in Flip", payload.Status)
+		_, err := h.transactionService.RejectPayment(transactionID, &reason)
 		if err != nil {
-			// Log error but don't return error to Xendit to prevent retries
-			fmt.Printf("Failed to reject payment for transaction %s: %v\n", payload.TransactionID, err)
+			// Log error but don't return error to Flip to prevent retries
+			fmt.Printf("Failed to reject payment for transaction %s: %v\n", transactionID, err)
 		}
 	}
 
-	// Always return success to Xendit to prevent retries
+	// Always return success to Flip to prevent retries
 	return c.JSON(fiber.Map{
 		"status":  "success",
 		"message": "Webhook processed",
 	})
+}
+
+// GetSupportedPaymentMethods returns all supported payment methods with their fees
+func (h *TransactionHandler) GetSupportedPaymentMethods(c *fiber.Ctx) error {
+	amountStr := c.Query("amount")
+	var amount int64 = 100 // Default amount for fee calculation
+
+	if amountStr != "" {
+		if parsedAmount, err := strconv.ParseInt(amountStr, 10, 64); err == nil {
+			amount = parsedAmount
+		}
+	}
+
+	methods := []map[string]interface{}{
+		{
+			"method":      "VA_BCA",
+			"name":        "Virtual Account BCA",
+			"type":        "virtual_account",
+			"fee":         4000, // 4 GSALT = 4000 IDR
+			"description": "Transfer melalui Virtual Account BCA",
+		},
+		{
+			"method":      "VA_BNI",
+			"name":        "Virtual Account BNI",
+			"type":        "virtual_account",
+			"fee":         4000,
+			"description": "Transfer melalui Virtual Account BNI",
+		},
+		{
+			"method":      "VA_BRI",
+			"name":        "Virtual Account BRI",
+			"type":        "virtual_account",
+			"fee":         4000,
+			"description": "Transfer melalui Virtual Account BRI",
+		},
+		{
+			"method":      "VA_MANDIRI",
+			"name":        "Virtual Account Mandiri",
+			"type":        "virtual_account",
+			"fee":         4000,
+			"description": "Transfer melalui Virtual Account Mandiri",
+		},
+		{
+			"method":      "QRIS",
+			"name":        "QRIS",
+			"type":        "qris",
+			"fee":         max(amount*7/1000*1000, 2000), // 0.7% or min 2000 IDR
+			"description": "Bayar dengan scan QR Code",
+		},
+		{
+			"method":      "EWALLET_OVO",
+			"name":        "OVO",
+			"type":        "ewallet",
+			"fee":         5000,
+			"description": "Bayar dengan OVO",
+		},
+		{
+			"method":      "EWALLET_DANA",
+			"name":        "DANA",
+			"type":        "ewallet",
+			"fee":         5000,
+			"description": "Bayar dengan DANA",
+		},
+		{
+			"method":      "EWALLET_GOPAY",
+			"name":        "GoPay",
+			"type":        "ewallet",
+			"fee":         5000,
+			"description": "Bayar dengan GoPay",
+		},
+		{
+			"method":      "EWALLET_SHOPEEPAY",
+			"name":        "ShopeePay",
+			"type":        "ewallet",
+			"fee":         5000,
+			"description": "Bayar dengan ShopeePay",
+		},
+		{
+			"method":      "CREDIT_CARD",
+			"name":        "Credit Card",
+			"type":        "credit_card",
+			"fee":         max(amount*29/1000*1000, 10000), // 2.9% or min 10000 IDR
+			"description": "Bayar dengan Kartu Kredit",
+		},
+		{
+			"method":      "DEBIT_CARD",
+			"name":        "Debit Card",
+			"type":        "debit_card",
+			"fee":         max(amount*29/1000*1000, 10000), // 2.9% or min 10000 IDR
+			"description": "Bayar dengan Kartu Debit",
+		},
+		{
+			"method":      "RETAIL_ALFAMART",
+			"name":        "Alfamart",
+			"type":        "retail",
+			"fee":         5000,
+			"description": "Bayar di Alfamart",
+		},
+		{
+			"method":      "RETAIL_INDOMARET",
+			"name":        "Indomaret",
+			"type":        "retail",
+			"fee":         5000,
+			"description": "Bayar di Indomaret",
+		},
+	}
+
+	return pkg.SuccessResponse(c, methods)
+}
+
+// max helper function
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// ProcessWithdrawal handles withdrawal processing
+func (h *TransactionHandler) ProcessWithdrawal(c *fiber.Ctx) error {
+	account := c.Locals("account").(*models.Account)
+
+	var req models.WithdrawalRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	// Convert amount from string to GSALT units
+	amountGsalt, err := decimal.NewFromString(req.AmountGsalt)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+	amountGsaltUnits := amountGsalt.Mul(decimal.NewFromInt(100)).IntPart()
+
+	transaction, err := h.transactionService.ProcessWithdrawal(
+		account.ConnectID.String(),
+		amountGsaltUnits,
+		req.BankCode,
+		req.AccountNumber,
+		req.RecipientName,
+		req.Description,
+		req.ExternalReferenceID,
+	)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, transaction)
+}
+
+// GetSupportedBanksForWithdrawal returns list of banks that support withdrawal
+func (h *TransactionHandler) GetSupportedBanksForWithdrawal(c *fiber.Ctx) error {
+	ctx := c.Context()
+	banks, err := h.transactionService.GetSupportedBanksForWithdrawal(ctx)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, banks)
+}
+
+// GetWithdrawalBalance returns available balance for withdrawal
+func (h *TransactionHandler) GetWithdrawalBalance(c *fiber.Ctx) error {
+	account := c.Locals("account").(*models.Account)
+
+	balance, err := h.transactionService.GetWithdrawalBalance(account.ConnectID.String())
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	// Convert balance to GSALT decimal for display
+	balanceGsalt := decimal.NewFromInt(balance).Div(decimal.NewFromInt(100))
+
+	response := map[string]interface{}{
+		"balance_gsalt_units": balance,
+		"balance_gsalt":       balanceGsalt,
+		"balance_idr":         balanceGsalt.Mul(decimal.NewFromInt(1000)),
+	}
+
+	return pkg.SuccessResponse(c, response)
+}
+
+// CheckWithdrawalStatus checks the status of a withdrawal transaction
+func (h *TransactionHandler) CheckWithdrawalStatus(c *fiber.Ctx) error {
+	transactionId := c.Params("id")
+
+	response, err := h.transactionService.CheckWithdrawalStatus(transactionId)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, response)
+}
+
+// ValidateBankAccountForWithdrawal validates bank account before withdrawal
+func (h *TransactionHandler) ValidateBankAccountForWithdrawal(c *fiber.Ctx) error {
+	var req models.BankAccountInquiryRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	ctx := c.Context()
+	response, err := h.transactionService.ValidateBankAccountForWithdrawal(ctx, req.BankCode, req.AccountNumber)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, response)
 }

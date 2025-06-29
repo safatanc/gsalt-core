@@ -1,0 +1,2928 @@
+{
+	"info": {
+		"_postman_id": "14e38cc9-e2d1-4f60-899d-ec17d4751f28",
+		"name": "Flip for Business - API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "21771287"
+	},
+	"item": [
+		{
+			"name": "General",
+			"item": [
+				{
+					"name": "Get Balance",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/general/balance",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"general",
+								"balance"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List of Banks",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/general/banks",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"general",
+								"banks"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Maintenance Info",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/general/maintenance",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"general",
+								"maintenance"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Money Transfer / Disbursement",
+			"item": [
+				{
+					"name": "Bank Account Inquiry",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "account_number",
+									"value": "12563546755",
+									"description": "(Required) - The account number of the bank account.",
+									"type": "text"
+								},
+								{
+									"key": "bank_code",
+									"value": "bca",
+									"description": "(Required) - Bank code of the account. Accepted value are listed in API Docs.",
+									"type": "text"
+								},
+								{
+									"key": "inquiry_key",
+									"value": "your-inquiry-key-123",
+									"description": "(Optional) - Inquiry key for handling multiple request with multiple callback.",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/disbursement/bank-account-inquiry",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"disbursement",
+								"bank-account-inquiry"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Money Transfer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							},
+							{
+								"key": "idempotency-key",
+								"value": "",
+								"description": "String (Required) - Idempotency key. Please see more detail on Idempotent Request API Docs section.",
+								"type": "text"
+							},
+							{
+								"key": "X-TIMESTAMP",
+								"value": "",
+								"description": "String (Optional) - Request timestamp. The format will follow the ISO8601 format.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "account_number",
+									"value": "5465327020",
+									"description": "String (Required) - The account number of the bank account",
+									"type": "text"
+								},
+								{
+									"key": "bank_code",
+									"value": "bca",
+									"description": "String (required) - Bank code of the account",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "45000",
+									"description": "Integer (Required) - The amount of money to be disbursed",
+									"type": "text"
+								},
+								{
+									"key": "remark",
+									"value": "testing ",
+									"description": "(Optional) - Remark to be included in the transfer made to the recipient.",
+									"type": "text"
+								},
+								{
+									"key": "recipient_city",
+									"value": "",
+									"description": "(Optional) - City code of the recipient city. Available value can be retrieved from city list API.",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_email",
+									"value": "",
+									"description": "(Optional) - List of the recipient emails.",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v3}}/disbursement",
+							"host": [
+								"{{base_url_v3}}"
+							],
+							"path": [
+								"disbursement"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Disbursement",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url_v3}}/disbursement?pagination=1&page=&sort=",
+							"host": [
+								"{{base_url_v3}}"
+							],
+							"path": [
+								"disbursement"
+							],
+							"query": [
+								{
+									"key": "pagination",
+									"value": "1"
+								},
+								{
+									"key": "page",
+									"value": ""
+								},
+								{
+									"key": "sort",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Disbursement by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v3}}/get-disbursement?id=test",
+							"host": [
+								"{{base_url_v3}}"
+							],
+							"path": [
+								"get-disbursement"
+							],
+							"query": [
+								{
+									"key": "id",
+									"value": "test",
+									"description": "(Required) - Transaction ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Disbursement by Idempotency Key",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v3}}/get-disbursement?idempotency-key=test",
+							"host": [
+								"{{base_url_v3}}"
+							],
+							"path": [
+								"get-disbursement"
+							],
+							"query": [
+								{
+									"key": "idempotency-key",
+									"value": "test",
+									"description": "(Required) - Transaction ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Special Money Transfer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							},
+							{
+								"key": "idempotency-key",
+								"value": "",
+								"description": "String (Required) - Idempotency key. Please see more detail on Idempotent Request API Docs section.",
+								"type": "text"
+							},
+							{
+								"key": "X-TIMESTAMP",
+								"value": "",
+								"description": "String (Optional) - Request timestamp. The format will follow the ISO8601 format.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "account_number",
+									"value": "1265473864745",
+									"description": "(Required) - The account number of the recipient.",
+									"type": "text"
+								},
+								{
+									"key": "bank_code",
+									"value": "bni",
+									"description": "(Required) - Bank code of the recipient bank. Accepted value are listed in API Docs.",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "96000",
+									"description": "(Required) - The amount of money to be disbursed",
+									"type": "text"
+								},
+								{
+									"key": "remark",
+									"value": "test-123",
+									"description": "(Optional) - Remark to be included in the transfer made to the recipient.",
+									"type": "text"
+								},
+								{
+									"key": "recipient_city",
+									"value": "",
+									"description": "(Optional) - City code of the recipient city. Available value can be retrieved from city list API.",
+									"type": "text"
+								},
+								{
+									"key": "sender_country",
+									"value": "100252",
+									"description": "(Required) - Country code of the sender’s residence. Available value can be retrieved from country list API",
+									"type": "text"
+								},
+								{
+									"key": "sender_place_of_birth",
+									"value": "",
+									"description": "(Optional) - City/country code of the sender’s place of birth. Use city code if the sender’s place of birth is in Indonesia, and country code if outside Indonesia. Available value can be retrieved from city/country list API.",
+									"type": "text"
+								},
+								{
+									"key": "sender_date_of_birth",
+									"value": "",
+									"description": "(Optional) - Sender’s date of birth with YYYY-MM-DD format",
+									"type": "text"
+								},
+								{
+									"key": "sender_identity_type",
+									"value": "",
+									"description": "(Optional) - Sender’s ID type. Accepted value are: nat_id, drv_lic, passport, bank_acc (default).",
+									"type": "text"
+								},
+								{
+									"key": "sender_name",
+									"value": "test user",
+									"description": "(Required) - The name of the user of the Money Transfer Company that act as a sender.",
+									"type": "text"
+								},
+								{
+									"key": "sender_address",
+									"value": "jakarta",
+									"description": "(Required) - Sender’s address.",
+									"type": "text"
+								},
+								{
+									"key": "sender_identity_number",
+									"value": "\"\"",
+									"description": "(Optional) - Sender’s ID number. Default value is from attribute account_number.",
+									"type": "text"
+								},
+								{
+									"key": "sender_job",
+									"value": "others",
+									"description": "(Required) - Sender’s job. Accepted values are: housewife, entrepreneur, private_employee, government_employee, foundation_board, indonesian_migrant_worker, company, others.",
+									"type": "text"
+								},
+								{
+									"key": "direction",
+									"value": "DOMESTIC_SPECIAL_TRANSFER",
+									"description": "(Required) - The direction of the transaction. Accepted values are: DOMESTIC_SPECIAL_TRANSFER, FOREIGN_INBOUND_SPECIAL_TRANSFER",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_email",
+									"value": "",
+									"description": "(Optional) - List of the recipient emails (separated by comma)",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v3}}/special-disbursement",
+							"host": [
+								"{{base_url_v3}}"
+							],
+							"path": [
+								"special-disbursement"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "City List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/disbursement/city-list",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"disbursement",
+								"city-list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Country List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/disbursement/country-list",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"disbursement",
+								"country-list"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "City and Country List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/disbursement/city-country-list",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"disbursement",
+								"city-country-list"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Agent Money Transfer",
+			"item": [
+				{
+					"name": "Agent Verification (KYC Part)",
+					"item": [
+						{
+							"name": "Upload Agent Identity Image",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "bigflip-your-unique-id",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										},
+										{
+											"key": "identity_type",
+											"value": "1",
+											"description": "(Required) - Image file that wants to be uploaded",
+											"type": "text"
+										},
+										{
+											"key": "selfie",
+											"value": "1",
+											"description": "(Required) - Type of identity. Accepted values:\n- \"1\": National Id Card or KTP in Indonesia\n- \"2\": Passport",
+											"type": "text"
+										},
+										{
+											"key": "image",
+											"description": "(Optional) - Flag denotes the uploaded file is the identity image or selfie with identity image. Accepted values:\n- \"0\": False (default). Denotes that the uploaded file is identity image.\n- \"1\": True. Denotes that the uploaded file is selfie with identity image.",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/users/[agent_id]/identities",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"users",
+										"[agent_id]",
+										"identities"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Upload KYC Documents",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "bigflip-your-unique-id",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_id",
+											"value": "123",
+											"description": "(Required) - Agent’s ID",
+											"type": "text"
+										},
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										},
+										{
+											"key": "student_card",
+											"description": "(Optional) - Student card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "student_card_selfie",
+											"description": "(Optional) - Selfie with the student card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "employee_card",
+											"description": "(Optional) - Employee card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "employee_card_selfie",
+											"description": "(Optional) - Selfie with the employee card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "last_certificate",
+											"description": "(Optional) - Certificate image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "last_certificate_selfie",
+											"description": "(Optional) - Selfie with the certificate image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "passport",
+											"description": "(Optional) - Passport image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "passport_selfie",
+											"description": "(Optional) - Selfie with the passport image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "family_card",
+											"description": "(Optional) - Family card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "family_card_selfie",
+											"description": "(Optional) - Selfie with the family card image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "driving_license",
+											"description": "(Optional) - Driving license image file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "driving_license_selfie",
+											"description": "(Optional) - Selfie with the driving license image file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/documents",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"documents"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Submit KYC Information",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "bigflip-your-unique-id",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/users/[agent_id]/submit",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"users",
+										"[agent_id]",
+										"submit"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User Agent Identity",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "bigflip-your-unique-id",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										},
+										{
+											"key": "name",
+											"value": "",
+											"description": "(Optional) - Agent’s full name",
+											"type": "text"
+										},
+										{
+											"key": "identity_type",
+											"value": "",
+											"description": "(Optional) - Type of identity. Accepted values: ktp, passport",
+											"type": "text"
+										},
+										{
+											"key": "identity_number",
+											"value": "",
+											"description": "(Optional) - Identity number based on the type chosen. Maximum character for each identity type: 16 characters for KTP, 20 characters for Passport",
+											"type": "text"
+										},
+										{
+											"key": "birth_date",
+											"value": "",
+											"description": "(Optional) - Agent’s birth date on DD-MM-YYYY format",
+											"type": "text"
+										},
+										{
+											"key": "birth_place",
+											"value": "",
+											"description": "(Optional) - Agent’s birth place",
+											"type": "text"
+										},
+										{
+											"key": "country_id",
+											"value": "",
+											"description": "(Optional) - Agent’s country code based on the identity chosen. Available values can be retrieved from the country list API.",
+											"type": "text"
+										},
+										{
+											"key": "province_id",
+											"value": "",
+											"description": "(Optional) - Agent’s province code based on the identity chosen. Available values can be retrieved from the province list API.",
+											"type": "text"
+										},
+										{
+											"key": "city_id",
+											"value": "",
+											"description": "(Optional) - Agent’s city code based on the identity chosen. Available values can be retrieved from the city list API.",
+											"type": "text"
+										},
+										{
+											"key": "district_id",
+											"value": "",
+											"description": "(Optional) - Agent’s district code based on the identity chosen. Available values can be retrieved from the district list API",
+											"type": "text"
+										},
+										{
+											"key": "address",
+											"value": "",
+											"description": "(Optional) - Agent’s address based on the identity chosen",
+											"type": "text"
+										},
+										{
+											"key": "gender",
+											"value": "",
+											"description": "(Optional) - Agent’s gender. Accepted values: male, female",
+											"type": "text"
+										},
+										{
+											"key": "occupation",
+											"value": "",
+											"description": "(Optional) - Agent’s job. Accepted values are: housewife, entrepreneur, private_employee, government_employee, foundation_board, indonesian_migrant_worker, company, others",
+											"type": "text"
+										},
+										{
+											"key": "phone_number",
+											"value": "",
+											"description": "(Optional) - Agent’s phone number. It must be the one that has been verified by the company.",
+											"type": "text"
+										},
+										{
+											"key": "user_identity_address",
+											"value": "",
+											"description": "(Optional) - A flag to set if the current residential address of the Agent is the same as the identity address. Value: 0: false, 1: true",
+											"type": "text"
+										},
+										{
+											"key": "email",
+											"value": "",
+											"description": "(Optional) - Agent’s email",
+											"type": "text"
+										},
+										{
+											"key": "residence_country_id",
+											"value": "",
+											"description": "(Optional) - Agent’s current residential address country code",
+											"type": "text"
+										},
+										{
+											"key": "residence_province_id",
+											"value": "",
+											"description": "(Optional) - Agent’s current residential address province code",
+											"type": "text"
+										},
+										{
+											"key": "recidence_city_id",
+											"value": "",
+											"description": "(Optional) - Agent’s current residential address city code",
+											"type": "text"
+										},
+										{
+											"key": "residence_district_id",
+											"value": "",
+											"description": "(Optional) - Agent’s current residential address district code",
+											"type": "text"
+										},
+										{
+											"key": "residence_address",
+											"value": "",
+											"description": "(Optional) - Agent’s current residential address ",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/users/497/repair",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"users",
+										"497",
+										"repair"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Repair Identity Image",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										},
+										{
+											"key": "image",
+											"description": "(Required) - Agent’s identity image file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/users/:agent_id/repairPhoto",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"users",
+										":agent_id",
+										"repairPhoto"
+									],
+									"variable": [
+										{
+											"key": "agent_id",
+											"value": null,
+											"description": "Agent's ID"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update Agent Selfie Photo",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data",
+										"description": "String (Required) - Request content type: multipart/form-data.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)",
+											"type": "text"
+										},
+										{
+											"key": "image",
+											"description": "(Required) - Agent’s identity selfie image file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url_kyc}}/users/:agent_id/repairSelfie",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"users",
+										":agent_id",
+										"repairSelfie"
+									],
+									"variable": [
+										{
+											"key": "agent_id",
+											"value": null,
+											"description": "Agent's ID"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get List of Countries",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": " application/x-www-form-urlencoded",
+										"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url_kyc}}/countries?user_type=1",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"countries"
+									],
+									"query": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get List of Province",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": " application/x-www-form-urlencoded",
+										"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url_kyc}}/provinces?user_type=1&country_id",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"provinces"
+									],
+									"query": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)"
+										},
+										{
+											"key": "country_id",
+											"value": null,
+											"description": "(Optional) - Country ID for filtering the provinces"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get List of Cities",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": " application/x-www-form-urlencoded",
+										"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url_kyc}}/cities?user_type=1&province_id",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"cities"
+									],
+									"query": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)"
+										},
+										{
+											"key": "province_id",
+											"value": null,
+											"description": "(Optional) - Province ID for filtering the cities"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Get List of Districts",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": " application/x-www-form-urlencoded",
+										"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+										"type": "text"
+									},
+									{
+										"key": "Request-ID",
+										"value": "",
+										"description": "String (Required) - The Request-ID will be formed of bigflip-{uuid}, where the “uuid” (Universally unique identifier) has to be generated on your end. Example: \"Request-ID: bigflip-47EB7F57-5565-4BF0-B9DD-46C6268CEE71\".",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url_kyc}}/districts?user_type=1&city_id",
+									"host": [
+										"{{base_url_kyc}}"
+									],
+									"path": [
+										"districts"
+									],
+									"query": [
+										{
+											"key": "user_type",
+											"value": "1",
+											"description": "(Required) - The value should be: 1 (user type Agent)"
+										},
+										{
+											"key": "city_id",
+											"value": null,
+											"description": "(Optional) - City ID for filtering the districts"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Create Agent Money Transfer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							},
+							{
+								"key": "idempotency-key",
+								"value": "",
+								"type": "text"
+							},
+							{
+								"key": "X-TIMESTAMP",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "agent_id",
+									"value": "496",
+									"description": "(Required) - Agent’s ID",
+									"type": "text"
+								},
+								{
+									"key": "account_number",
+									"value": "1287685466",
+									"description": "(Required) - The account number of the recipient",
+									"type": "text"
+								},
+								{
+									"key": "bank_code",
+									"value": "bca",
+									"description": "(Required) - Bank code of the recipient bank",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "60000",
+									"description": "(Required) - The amount of money to be disbursed",
+									"type": "text"
+								},
+								{
+									"key": "direction",
+									"value": "DOMESTIC_SPECIAL_TRANSFER",
+									"description": "(Required) - The direction of the transaction. Accepted values: DOMESTIC_SPECIAL_TRANSFER, FOREIGN_INBOUND_SPECIAL_TRANSFER",
+									"type": "text"
+								},
+								{
+									"key": "remark",
+									"value": "test",
+									"description": "(Optional) - Additional remark for the transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_email",
+									"value": "",
+									"description": "(Optional) - List of the recipient emails (separated by comma)",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/agent-disbursements",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agent-disbursements"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Agent Disbursement List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/agent-disbursements?agent_id=&pagination=1&page=1&sort_by=",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agent-disbursements"
+							],
+							"query": [
+								{
+									"key": "agent_id",
+									"value": "",
+									"description": "(Optional) - The agent ID that wants to be retrieved. If not provided, will return all agent disbursement for the company instead."
+								},
+								{
+									"key": "pagination",
+									"value": "1",
+									"description": "(Optional) - The pagination of the result. Default value is 20."
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "(Optional) - The page number of the result to be viewed."
+								},
+								{
+									"key": "sort_by",
+									"value": "",
+									"description": "(Optional) - Sort the result by the attribute. Use the attribute name (e.g sort=id) to sort in ascending order or dash+attribute name (e.g sort=-id) to sort in descending order."
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Agent Disbursement data by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/agent-disbursements/{id}",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agent-disbursements",
+								"{id}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Agent Identity",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "name",
+									"value": "yaya",
+									"description": "(Required) - Agent’s full name",
+									"type": "text"
+								},
+								{
+									"key": "identity_type",
+									"value": "ktp",
+									"description": "(Required) - Type of identity. Accepted values: ktp, passport",
+									"type": "text"
+								},
+								{
+									"key": "identity_number",
+									"value": "5647365674897776",
+									"description": "(Required) - Identity number based on the type chosen. Maximum character for each identity type: 16 characters for KTP, 20 characters for Passport",
+									"type": "text"
+								},
+								{
+									"key": "birth_date",
+									"value": "04-06-1999",
+									"description": "(Required) - Agent’s birth date on DD-MM-YYYY format",
+									"type": "text"
+								},
+								{
+									"key": "birth_place",
+									"value": "jakarta ",
+									"description": "(Required) - Agent’s birth place",
+									"type": "text"
+								},
+								{
+									"key": "country_id",
+									"value": "1",
+									"description": "(Required) - Agent’s country code based on the identity chosen. Available values can be retrieved from the country list API.",
+									"type": "text"
+								},
+								{
+									"key": "province_id",
+									"value": "1",
+									"description": "(Required) - Agent’s province code based on the identity chosen. Available values can be retrieved from the province list API.",
+									"type": "text"
+								},
+								{
+									"key": "city_id",
+									"value": "1",
+									"description": "(Required) - Agent’s city code based on the identity chosen. Available values can be retrieved from the city list API.",
+									"type": "text"
+								},
+								{
+									"key": "district_id",
+									"value": "1",
+									"description": "(Required) - Agent’s district code based on the identity chosen. Available values can be retrieved from the district list API",
+									"type": "text"
+								},
+								{
+									"key": "address",
+									"value": "jakarta selatan",
+									"description": "(Required) - Agent’s address based on the identity chosen",
+									"type": "text"
+								},
+								{
+									"key": "gender",
+									"value": "female",
+									"description": "(Required) - Agent’s gender. Accepted values: male, female",
+									"type": "text"
+								},
+								{
+									"key": "occupation",
+									"value": "government_employee",
+									"description": "(Required) - Agent’s job. Accepted values are: housewife, entrepreneur, private_employee, government_employee, foundation_board, indonesian_migrant_worker, company, others",
+									"type": "text"
+								},
+								{
+									"key": "phone_number",
+									"value": "085674563456",
+									"description": "(Required) - Agent’s phone number. It must be the one that has been verified by the company.",
+									"type": "text"
+								},
+								{
+									"key": "user_identity_address",
+									"value": "1",
+									"description": "(Optional) - A flag to set if the current residential address of the Agent is the same as the identity address. Value: 0: false, 1: true",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "email",
+									"value": "johndoe3eee3@gmail.com",
+									"description": "(Optional) - Agent’s email",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "residence_country_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address country code",
+									"type": "text"
+								},
+								{
+									"key": "residence_province_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address province code",
+									"type": "text"
+								},
+								{
+									"key": "recidence_city_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address city code",
+									"type": "text"
+								},
+								{
+									"key": "residence_district_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address district code",
+									"type": "text"
+								},
+								{
+									"key": "residence_address",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/agents",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Agent Identity",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "name",
+									"value": "",
+									"description": "(Required) - Agent’s full name",
+									"type": "text"
+								},
+								{
+									"key": "identity_type",
+									"value": "",
+									"description": "(Required) - Type of identity. Accepted values: ktp, passport",
+									"type": "text"
+								},
+								{
+									"key": "identity_number",
+									"value": "",
+									"description": "(Required) - Identity number based on the type chosen. Maximum character for each identity type: 16 characters for KTP, 20 characters for Passport",
+									"type": "text"
+								},
+								{
+									"key": "birth_date",
+									"value": "",
+									"description": "(Required) - Agent’s birth date on DD-MM-YYYY format",
+									"type": "text"
+								},
+								{
+									"key": "birth_place",
+									"value": "",
+									"description": "(Required) - Agent’s birth place",
+									"type": "text"
+								},
+								{
+									"key": "country_id",
+									"value": "",
+									"description": "(Required) - Agent’s country code based on the identity chosen. Available values can be retrieved from the country list API.",
+									"type": "text"
+								},
+								{
+									"key": "province_id",
+									"value": "",
+									"description": "(Required) - Agent’s province code based on the identity chosen. Available values can be retrieved from the province list API.",
+									"type": "text"
+								},
+								{
+									"key": "city_id",
+									"value": "",
+									"description": "(Required) - Agent’s city code based on the identity chosen. Available values can be retrieved from the city list API.",
+									"type": "text"
+								},
+								{
+									"key": "district_id",
+									"value": "",
+									"description": "(Required) - Agent’s district code based on the identity chosen. Available values can be retrieved from the district list API",
+									"type": "text"
+								},
+								{
+									"key": "address",
+									"value": "",
+									"description": "(Required) - Agent’s address based on the identity chosen",
+									"type": "text"
+								},
+								{
+									"key": "gender",
+									"value": "",
+									"description": "(Required) - Agent’s gender. Accepted values: male, female",
+									"type": "text"
+								},
+								{
+									"key": "occupation",
+									"value": "",
+									"description": "(Required) - Agent’s job. Accepted values are: housewife, entrepreneur, private_employee, government_employee, foundation_board, indonesian_migrant_worker, company, others",
+									"type": "text"
+								},
+								{
+									"key": "phone_number",
+									"value": "",
+									"description": "(Required) - Agent’s phone number. It must be the one that has been verified by the company.",
+									"type": "text"
+								},
+								{
+									"key": "user_identity_address",
+									"value": "",
+									"description": "(Optional) - A flag to set if the current residential address of the Agent is the same as the identity address. Value: 0: false, 1: true",
+									"type": "text"
+								},
+								{
+									"key": "email",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address country code",
+									"type": "text"
+								},
+								{
+									"key": "residence_country_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address province code",
+									"type": "text"
+								},
+								{
+									"key": "residence_province_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address city code",
+									"type": "text"
+								},
+								{
+									"key": "recidence_city_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address city code",
+									"type": "text"
+								},
+								{
+									"key": "residence_district_id",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address district code",
+									"type": "text"
+								},
+								{
+									"key": "residence_address",
+									"value": "",
+									"description": "(Optional) - Agent’s current residential address",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/agents/:agent_id",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agents",
+								":agent_id"
+							],
+							"variable": [
+								{
+									"key": "agent_id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Agent Identity",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/agents/{agent_id}",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"agents",
+								"{agent_id}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "International Transfer",
+			"item": [
+				{
+					"name": "Get Exchange Rates",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement/exchange-rates?country_iso_code&transaction_type",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement",
+								"exchange-rates"
+							],
+							"query": [
+								{
+									"key": "country_iso_code",
+									"value": null,
+									"description": "(Optional) - Country code using ISO 3166 (Alpha-3). You can choose multiple countries separate by comma. See supported Country ISO Codes in API Docs."
+								},
+								{
+									"key": "transaction_type",
+									"value": null,
+									"description": "(Optional) - Transaction type information. Possible values are: C2C, C2B"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Form Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement/form-data?country_iso_code&transaction_type",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement",
+								"form-data"
+							],
+							"query": [
+								{
+									"key": "country_iso_code",
+									"value": null,
+									"description": "(Required) - Country code using ISO 3166 (Alpha-3). See supported Country ISO Codes in API Docs."
+								},
+								{
+									"key": "transaction_type",
+									"value": null,
+									"description": "(Required) - Transaction type information. Possible values are: C2C, C2B"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create International Transfer C2C2B",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							},
+							{
+								"key": "X-TIMESTAMP",
+								"value": "",
+								"description": "String (Optional) - Request timestamp. The format will follow the ISO8601 format.",
+								"type": "text"
+							},
+							{
+								"key": "idempotency-key",
+								"value": "",
+								"description": "String (Required) - your transaction unique ID",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "amount",
+									"value": "",
+									"description": "(Required) - Amount of money that wants to be disbursed to the beneficiary (in beneficiary currency). Maximum 2 decimal places, for Japan there can be no decimal. Must be within the minimum and maximum amount based on transaction currency.",
+									"type": "text"
+								},
+								{
+									"key": "source_country",
+									"value": "",
+									"description": "(Required) - Source country code using ISO 3166 (Alpha-3). Currently, the possible value is IDN.",
+									"type": "text"
+								},
+								{
+									"key": "destination_country",
+									"value": "",
+									"description": "(Required) - Destination country code using ISO 3166 (Alpha-3). See supported Destination Countries section in API Docs",
+									"type": "text"
+								},
+								{
+									"key": "transaction_type",
+									"value": "",
+									"description": "(Required) - Transaction type information. Possible values are: C2C, C2B",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_full_name",
+									"value": "",
+									"description": "(Required) - Full name of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_account_number",
+									"value": "",
+									"description": "(Required) - Account number of the beneficiary bank",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bank_id",
+									"value": "",
+									"description": "(Required) - ID of beneficiary bank",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bank_name",
+									"value": "",
+									"description": "(Optional) - Name of beneficiary bank. Can be used for destination countries AUS and GBR",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_email",
+									"value": "",
+									"description": "(Optional) - Email of beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_nationality",
+									"value": "",
+									"description": "(Required) - Country code using ISO 3166 (Alpha-3) of beneficiary nationality",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_province",
+									"value": "",
+									"description": "(Required) - Province or state of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_city",
+									"value": "",
+									"description": "(Required) - City of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_address",
+									"value": "",
+									"description": "(Required) - Address of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_postal_code",
+									"value": "",
+									"description": "(Optional) - Postal code of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_relationship",
+									"value": "",
+									"description": "(Required) - Relationship of beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_source_of_funds",
+									"value": "",
+									"description": "(Required) - Source of funds",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_remittance_purposes",
+									"value": "",
+									"description": "(Required) - Purpose of remittance",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_msisdn",
+									"value": "",
+									"description": "(Required, if the destination country need it) - A number used to identify a phone number internationally",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_iban",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Identifier of individual account involved in the international transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_swift_bic_code",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Identifier of specific bank during an international transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_sort_code",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Digits of code which is used by British and Irish banks",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_ifs_code",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Indian financial system code",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bsb_number",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Identifier of banks and branches across Australia",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_branch_number",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Identifier of banks and branches across Japan",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_document_reference_number",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Reference number of document related to the transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_registration_number",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Registration number",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_region",
+									"value": "",
+									"description": "(Required, if the destination country need it) - Required for destination country China code.",
+									"type": "text"
+								},
+								{
+									"key": "sender_name",
+									"value": "",
+									"description": "(Required) - The name of the user of the Money Transfer Company that act as a sender",
+									"type": "text"
+								},
+								{
+									"key": "sender_country",
+									"value": "",
+									"description": "(Required) - Country code of the sender’s residence. Available value can be retrieved from country list API.",
+									"type": "text"
+								},
+								{
+									"key": "sender_place_of_birth",
+									"value": "",
+									"description": "(Required) - City/country code of the sender’s place of birth. Use city code if the sender’s place of birth is in Indonesia, and country code if outside Indonesia. Available value can be retrieved from city/country list API.",
+									"type": "text"
+								},
+								{
+									"key": "sender_date_of_birth",
+									"value": "",
+									"description": "(Required) - Sender’s date of birth with YYYY-MM-DD format",
+									"type": "text"
+								},
+								{
+									"key": "sender_address",
+									"value": "",
+									"description": "(Required) - Sender’s address",
+									"type": "text"
+								},
+								{
+									"key": "sender_identity_type",
+									"value": "",
+									"description": "(Required) - Sender’s ID type. Accepted value are: nat_id, passport",
+									"type": "text"
+								},
+								{
+									"key": "sender_identity_number",
+									"value": "",
+									"description": "(Required) - Sender’s ID number",
+									"type": "text"
+								},
+								{
+									"key": "sender_job",
+									"value": "",
+									"description": "(Required) - Sender’s job. Accepted values are: housewife, entrepreneur, private_employee, government_employee, foundation_board, indonesian_migrant_worker, company, others",
+									"type": "text"
+								},
+								{
+									"key": "sender_email",
+									"value": "",
+									"description": "(Required) - Sender’s email. Only accept one email.",
+									"type": "text"
+								},
+								{
+									"key": "sender_city",
+									"value": "",
+									"description": "(Required) - Sender’s city.",
+									"type": "text"
+								},
+								{
+									"key": "sender_phone_number",
+									"value": "",
+									"description": "(Required) - Sender’s phone number. Start with country phone code.",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create International Transfer B2B2C",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							},
+							{
+								"key": "X-TIMESTAMP",
+								"value": "",
+								"description": "String (Optional) - Request timestamp. The format will follow the ISO8601 format.",
+								"type": "text"
+							},
+							{
+								"key": "idempotency-key",
+								"value": "",
+								"description": "String (Required) - your transaction unique ID",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "destination_country",
+									"value": "",
+									"description": "(Required) - Destination country code using ISO 3166 (Alpha-3). See supported Destination Countries section in API Docs",
+									"type": "text"
+								},
+								{
+									"key": "source_country",
+									"value": "",
+									"description": "(Required) - Source country code using ISO 3166 (Alpha-3). Currently, the possible value is IDN.",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "",
+									"description": "(Required) - Amount of money that wants to be disbursed to the beneficiary (in beneficiary currency). Maximum 2 decimal places, for Japan there can be no decimal. Must be within the minimum and maximum amount based on transaction currency.",
+									"type": "text"
+								},
+								{
+									"key": "transaction_type",
+									"value": "",
+									"description": "(Required) - Transaction type information. Possible values are: C2C, C2B",
+									"type": "text"
+								},
+								{
+									"key": "attachment_data",
+									"description": "File of invoice for Malaysia B2B\nAccepted extensions: txt, pdf, doc, docx, jpg, jpeg, png, bmp, rtf, xls, xlsx",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "attachment_type",
+									"value": "",
+									"description": "Currently possible value is invoice for MYS",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_account_number",
+									"value": "",
+									"description": "(Required) - Account number of the beneficiary bank",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_ach_code",
+									"value": "",
+									"description": "Ach code of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_address",
+									"value": "",
+									"description": "Address of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bank_id",
+									"value": "",
+									"description": "ID of beneficiary bank",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bank_name",
+									"value": "",
+									"description": "Name of beneficiary bank. Can be used for destination countries AUS and GBR",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_branch_number",
+									"value": "",
+									"description": "Identifier of banks and branches across Japan",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_bsb_number",
+									"value": "",
+									"description": "Identifier of banks and branches across Australia",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_city",
+									"value": "",
+									"description": "City of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_document_reference_number",
+									"value": "",
+									"description": "Reference number of document related to the transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_email",
+									"value": "",
+									"description": "(Optional) - Email of beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_full_name",
+									"value": "",
+									"description": "Full name of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_iban",
+									"value": "",
+									"description": "Identifier of individual account involved in the international transaction",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_id_expiration_date",
+									"value": "",
+									"description": "ID expiration date using YYYY-MM-DD format",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_ifs_code",
+									"value": "",
+									"description": "Indian financial system code",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_id_number",
+									"value": "",
+									"description": "ID Number",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_msisdn",
+									"value": "",
+									"description": "A number used to identify a phone number internationally",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_nationality",
+									"value": "",
+									"description": "Country code using ISO 3166 (Alpha-3) of beneficiary nationality",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_postal_code",
+									"value": "",
+									"description": "Postal code of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_province",
+									"value": "",
+									"description": "Province or state of the beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_relationship",
+									"value": "",
+									"description": "Relationship of beneficiary",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_remittance_purposes",
+									"value": "",
+									"description": "Purpose of remittance",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_sort_code",
+									"value": "",
+									"description": "Digits of code which is used by British and Irish banks",
+									"type": "text"
+								},
+								{
+									"key": "beneficiary_source_of_funds",
+									"value": "",
+									"description": "Source of funds",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement/create-with-attachment",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement",
+								"create-with-attachment"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get International Transfer",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement/:transaction_id",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement",
+								":transaction_id"
+							],
+							"variable": [
+								{
+									"key": "transaction_id",
+									"value": null,
+									"description": "Transaction ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All International Transfer",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/international-disbursement?pagination=&page=&sort_by=",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"international-disbursement"
+							],
+							"query": [
+								{
+									"key": "pagination",
+									"value": "",
+									"description": "(Optional) - The pagination of the result. Default value is 20."
+								},
+								{
+									"key": "page",
+									"value": "",
+									"description": "(Optional) - The page number of the result to be viewed."
+								},
+								{
+									"key": "sort_by",
+									"value": "",
+									"description": "(Optional) - Sort the result by the attribute. Use the attribute name (e.g sort=id) to sort in ascending order or dash+attribute name (e.g sort=-id) to sort in descending order."
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Accept Payment V2",
+			"item": [
+				{
+					"name": "Create Bill",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "title",
+									"value": "",
+									"description": "(Required) - The title of the bill.",
+									"type": "text"
+								},
+								{
+									"key": "type",
+									"value": "",
+									"description": "(Required) - Bill type:\n- SINGLE: single use\n- MULTIPLE: multiple use\nFor bill created with step 3 only SINGLE is permissible.",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "",
+									"description": "(Optional) - Payment amount, minimum Rp10.000 and maximum Rp10.000.000. Leave blank if want to set a flexible amount.\nOptional for bill created with Step 1 and mandatory for bill created with Step 2/ Step 3.",
+									"type": "text"
+								},
+								{
+									"key": "expired_date",
+									"value": "",
+									"description": "(Optional) - Bill expiry date. The bill can’t be used any more beyond the expiry date. Format: YYYY-MM-DD HH:mm.",
+									"type": "text"
+								},
+								{
+									"key": "redirect_url",
+									"value": "",
+									"description": "(Optional) - Redirect URL after payment is success.",
+									"type": "text"
+								},
+								{
+									"key": "is_address_required",
+									"value": "",
+									"description": "(Optional) - A flag if user needs to input their address when creating payment.\n0: false (default)\n1: true",
+									"type": "text"
+								},
+								{
+									"key": "is_phone_number_required",
+									"value": "",
+									"description": "(Optional) - A flag if user needs to input their phone number when creating payment.\n0: false (default)\n1: true",
+									"type": "text"
+								},
+								{
+									"key": "step",
+									"value": "",
+									"description": "(Required) - Which step the customers will be redirected to when opening the payment link.\n1: input-data (default)\n2: payment-method\n3: payment-confirmation",
+									"type": "text"
+								},
+								{
+									"key": "sender_name",
+									"value": "",
+									"description": "(Required for step 2-payment method or step 3-payment-confirmation) - Name of the Customer.",
+									"type": "text"
+								},
+								{
+									"key": "sender_email",
+									"value": "",
+									"description": "(Required for step 2-payment method or step 3-payment-confirmation) - Email of the Customer.",
+									"type": "text"
+								},
+								{
+									"key": "sender_phone_number",
+									"value": "",
+									"description": "(Required for step 2-payment method or step 3-payment-confirmation) - Phone number of the Customer.",
+									"type": "text"
+								},
+								{
+									"key": "sender_address",
+									"value": "",
+									"description": "(Required for step 2-payment method or step 3-payment-confirmation) - Address of the Customer.",
+									"type": "text"
+								},
+								{
+									"key": "sender_bank",
+									"value": "",
+									"description": "(Required for step 3-payment-confirmation) - Bank that is used for the payment. Value will be bank_code of Flip.",
+									"type": "text"
+								},
+								{
+									"key": "sender_bank_type",
+									"value": "",
+									"description": "(Required for step 3-payment-confirmation) - Type of the bank that is used for the payment:\n- For bank transfer the value must be set as \"bank_account\"\n- For a virtual account the value must be set as \"virtual_account\"\n- For e-wallet the value must be set as \"wallet_account\".\n- For retail the value must be set as \"online_to_offline_account\"\n- For credit card the value must be set as \"credit_card\"",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/bill",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								"bill"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Bill",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "title",
+									"value": "",
+									"description": "(Optional) - The title of the bill.",
+									"type": "text"
+								},
+								{
+									"key": "type",
+									"value": "",
+									"description": "(Optional) - Bill type:\n- SINGLE: single use\n- MULTIPLE: multiple use\nFor bill created with step 3 only SINGLE is permissible.",
+									"type": "text"
+								},
+								{
+									"key": "amount",
+									"value": "",
+									"description": "(Optional) - Payment amount, minimum Rp10.000 and maximum Rp10.000.000. Leave blank if want to set a flexible amount.\nOptional for bill created with Step 1 and mandatory for bill created with Step 2/ Step 3.",
+									"type": "text"
+								},
+								{
+									"key": "expired_date",
+									"value": "",
+									"description": "(Optional) - Bill expiry date. The bill can’t be used any more beyond the expiry date. Format: YYYY-MM-DD HH:mm.",
+									"type": "text"
+								},
+								{
+									"key": "redirect_url",
+									"value": "",
+									"description": "(Optional) - Redirect URL after payment is success.",
+									"type": "text"
+								},
+								{
+									"key": "status",
+									"value": "",
+									"description": "(Optional) - Bill activation status:\n- ACTIVE\n- INACTIVE",
+									"type": "text"
+								},
+								{
+									"key": "is_address_required",
+									"value": "",
+									"description": "(Optional) - A flag if user needs to input their address when creating payment.\n0: false (default)\n1: true",
+									"type": "text"
+								},
+								{
+									"key": "is_phone_number_required",
+									"value": "",
+									"description": "(Optional) - A flag if user needs to input their phone number when creating payment.\n0: false (default)\n1: true",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/:bill_id/bill",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								":bill_id",
+								"bill"
+							],
+							"variable": [
+								{
+									"key": "bill_id",
+									"value": null,
+									"description": "Bill ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Bill",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/:bill_id/bill",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								":bill_id",
+								"bill"
+							],
+							"variable": [
+								{
+									"key": "bill_id",
+									"value": null,
+									"description": "Bill ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Bills",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/bill",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								"bill"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Payment",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/:bill_id/bill?start_date&end_date&pagination&page&sort_by&sort_type",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								":bill_id",
+								"bill"
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": null,
+									"description": "(Optional) - Starting date of the data. Example: \"2020-01-01\"."
+								},
+								{
+									"key": "end_date",
+									"value": null,
+									"description": "(Optional) - Ending date of the data. Example: \"2020-12-12\". End date must be greater than start_date."
+								},
+								{
+									"key": "pagination",
+									"value": null,
+									"description": "(Optional) - Pagination of the data."
+								},
+								{
+									"key": "page",
+									"value": null,
+									"description": "(Optional) - The desired page of the data pagination."
+								},
+								{
+									"key": "sort_by",
+									"value": null,
+									"description": "(Optional) - Sort the result by the attribute."
+								},
+								{
+									"key": "sort_type",
+									"value": null,
+									"description": "(Optional) - You can sort in: sort_desc (descending), sort_asc (ascending)"
+								}
+							],
+							"variable": [
+								{
+									"key": "bill_id",
+									"value": null,
+									"description": "Bill ID"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Payment",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded",
+								"description": "String (Required) - Request content type: application/x-www-form-urlencoded.",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url_v2}}/pwf/bill?start_date&end_date&pagination&page&sort_by&sort_type",
+							"host": [
+								"{{base_url_v2}}"
+							],
+							"path": [
+								"pwf",
+								"bill"
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": null,
+									"description": "(Optional) - Starting date of the data. Example: \"2020-01-01\"."
+								},
+								{
+									"key": "end_date",
+									"value": null,
+									"description": "(Optional) - Ending date of the data. Example: \"2020-12-12\". End date must be greater than start_date."
+								},
+								{
+									"key": "pagination",
+									"value": null,
+									"description": "(Optional) - Pagination of the data."
+								},
+								{
+									"key": "page",
+									"value": null,
+									"description": "(Optional) - The desired page of the data pagination."
+								},
+								{
+									"key": "sort_by",
+									"value": null,
+									"description": "(Optional) - Sort the result by the attribute."
+								},
+								{
+									"key": "sort_type",
+									"value": null,
+									"description": "(Optional) - You can sort in: sort_desc (descending), sort_asc (ascending)"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Accept Payment V3",
+			"item": [
+				{
+					"name": "Create Bill V3",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Test Payment #1984587554434\",\n    \"type\": \"single\",\n    // checkout\n    // checkout_seamless\n    // direct_api\n    \"step\": \"checkout\",\n    \"amount\": 50000,\n    \"redirect_url\": \"https://flip.id\",\n    \"is_address_required\": true,\n    \"sender_address\": \"Foo Bar\",\n    \"is_phone_number_required\": true,\n    \"sender_phone_number\": \"08578674658\",\n    \"sender_name\": \"User Test\",\n    \"sender_email\": \"test1234+a@gmail.com\",\n    \"sender_bank\": \"credit_card\",\n    \"sender_bank_type\": \"credit_card_account\",\n    \"reference_id\": \"MerchantRefId05\",\n   \t\"item_details\": [\n      {\n            \"id\": null,\n            \"name\": \"test 1\",\n            \"price\": 10000,\n            \"quantity\": 1,\n            \"desc\": \"Lorem ipsum\",\n            \"image_url\": \"https://placehold.co/400x400?text=Product\"\n        },\n        {\n            \"id\": \"SKU002\",\n            \"name\": \"test36\",\n            \"price\": 10000,\n            \"quantity\": 1,\n            \"desc\": \"Dolor amet\",\n            \"image_url\": \"https://placehold.co/400x400?text=Product\"\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{stg_url_v3}}/pwf/bill",
+							"host": [
+								"{{stg_url_v3}}"
+							],
+							"path": [
+								"pwf",
+								"bill"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Bill V3",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Bill v3 testing edited \"\n    // \"type\": \"MULTIPLE\"\n    // checkout\n    // checkout_seamless\n    // direct_api\n    // \"step\": \"checkout\",\n    // \"amount\": 11000,\n    // \"redirect_url\": \"https://flip.id\",\n    // \"is_address_required\": true,\n    //    \"sender_address\": \"Foo Bar\",\n    // \"is_phone_number_required\": true\n    //    \"sender_phone_number\": \"085780244353\",\n    // \"sender_name\": \"Syeikh A\",\n    // \"sender_email\": \"syeikhanugrah+a@gmail.com\",\n    //    \"sender_bank\": \"bca\",\n    //    \"sender_bank_type\": \"virtual_account\",\n    //    \"reference_id\": \"MerchantRefId01\",\n    //    \"charge_fee\": true,\n    // \"item_details\": [\n    //     {\n    //         \"id\": \"has\",\n    //         \"name\": \"Without ID\",\n    //         \"price\": 10000,\n    //         \"quantity\": 1,\n    //         \"desc\": \"Lorem ipsum\",\n    //         \"image_url\": \"https://placehold.co/400x400?text=Product\"\n    //     },\n    //     {\n    //         \"id\": \"SKU002\",\n    //         \"name\": \"Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the a\",\n    //         \"price\": 10000,\n    //         \"quantity\": 1,\n    //         \"desc\": \"Dolor amet\",\n    //         \"image_url\": \"https://placehold.co/400x400?text=Product\"\n    //     }\n    // ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{stg_url_v3}}/pwf/:bill_id/bill",
+							"host": [
+								"{{stg_url_v3}}"
+							],
+							"path": [
+								"pwf",
+								":bill_id",
+								"bill"
+							],
+							"variable": [
+								{
+									"key": "bill_id",
+									"value": ""
+								}
+							]
+						},
+						"description": "Edit Bill can be used to update amount, bill type or bill status. Bill that can be edited only bill from 'checkout' and 'checkout_seamless' step."
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Bill V3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{stg_url_v3}}/pwf/bill?page=1",
+							"host": [
+								"{{stg_url_v3}}"
+							],
+							"path": [
+								"pwf",
+								"bill"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Payment V3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{stg_url_v3}}/pwf/payment?sort_type=SORT_DESC&start_date&end_date&page=2&pagination&sort_by&reference_id=",
+							"host": [
+								"{{stg_url_v3}}"
+							],
+							"path": [
+								"pwf",
+								"payment"
+							],
+							"query": [
+								{
+									"key": "sort_type",
+									"value": "SORT_DESC"
+								},
+								{
+									"key": "start_date",
+									"value": null,
+									"description": "yyyy-mm-dd"
+								},
+								{
+									"key": "end_date",
+									"value": null,
+									"description": "yyyy-mm-dd"
+								},
+								{
+									"key": "page",
+									"value": "2"
+								},
+								{
+									"key": "pagination",
+									"value": null
+								},
+								{
+									"key": "sort_by",
+									"value": null
+								},
+								{
+									"key": "reference_id",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Bill V3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{stg_url_v3}}/pwf/154109/bill",
+							"host": [
+								"{{stg_url_v3}}"
+							],
+							"path": [
+								"pwf",
+								"154109",
+								"bill"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{
+				"key": "username",
+				"value": "{{secret_key}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "secret_key",
+			"value": "your-secret-key: (don't forget the colon after)",
+			"type": "string"
+		},
+		{
+			"key": "base_url_v2",
+			"value": "https://bigflip.id/big_sandbox_api/v2",
+			"type": "string"
+		},
+		{
+			"key": "base_url_v3",
+			"value": "https://bigflip.id/big_sandbox_api/v3",
+			"type": "string"
+		},
+		{
+			"key": "base_url_kyc",
+			"value": "https://api.flip.id/kyc-sandbox/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "stg_url_v3",
+			"value": "https://fm-dev-box.flip.id/big_api/v3",
+			"type": "string"
+		}
+	]
+}

@@ -90,32 +90,33 @@ const (
 
 // CreateBillRequest represents the V3 API request structure for creating bills
 type CreateBillRequest struct {
-	Title                 string       `json:"title"`
-	Type                  string       `json:"type"` // "single" or "multiple"
-	Step                  string       `json:"step"` // "checkout", "checkout_seamless", "direct_api"
-	Amount                int64        `json:"amount"`
-	RedirectURL           string       `json:"redirect_url,omitempty"`
+	Title                 string       `json:"title" validate:"required,max=255"`
+	Type                  string       `json:"type" validate:"required,oneof=single multiple"`                       // "single" or "multiple"
+	Step                  string       `json:"step" validate:"required,oneof=checkout checkout_seamless direct_api"` // "checkout", "checkout_seamless", "direct_api"
+	Amount                int64        `json:"amount" validate:"required,min=100"`
+	ExpiredDate           string       `json:"expired_date,omitempty"` // ISO 8601 format or relative time
+	RedirectURL           string       `json:"redirect_url,omitempty" validate:"omitempty,url"`
 	IsAddressRequired     bool         `json:"is_address_required,omitempty"`
-	SenderAddress         string       `json:"sender_address,omitempty"`
+	SenderAddress         string       `json:"sender_address,omitempty" validate:"omitempty,max=500"`
 	IsPhoneNumberRequired bool         `json:"is_phone_number_required,omitempty"`
-	SenderPhoneNumber     string       `json:"sender_phone_number,omitempty"`
-	SenderName            string       `json:"sender_name,omitempty"`
-	SenderEmail           string       `json:"sender_email,omitempty"`
-	SenderBank            string       `json:"sender_bank,omitempty"`
-	SenderBankType        string       `json:"sender_bank_type,omitempty"`
-	ReferenceID           string       `json:"reference_id,omitempty"`
+	SenderPhoneNumber     string       `json:"sender_phone_number,omitempty" validate:"omitempty,max=20"`
+	SenderName            string       `json:"sender_name,omitempty" validate:"omitempty,max=255"`
+	SenderEmail           string       `json:"sender_email,omitempty" validate:"omitempty,email"`
+	SenderBank            string       `json:"sender_bank,omitempty" validate:"omitempty,max=20"`
+	SenderBankType        string       `json:"sender_bank_type,omitempty" validate:"omitempty,max=50"`
+	ReferenceID           string       `json:"reference_id,omitempty" validate:"omitempty,max=255"`
 	ChargeFee             bool         `json:"charge_fee,omitempty"`
 	ItemDetails           []ItemDetail `json:"item_details,omitempty"`
 }
 
 // ItemDetail represents product/service details in the bill
 type ItemDetail struct {
-	ID       string `json:"id,omitempty"`
-	Name     string `json:"name"`
-	Price    int64  `json:"price"`
-	Quantity int    `json:"quantity"`
-	Desc     string `json:"desc,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
+	ID       string `json:"id,omitempty" validate:"omitempty,max=100"`
+	Name     string `json:"name" validate:"required,max=255"`
+	Price    int64  `json:"price" validate:"required,min=0"`
+	Quantity int    `json:"quantity" validate:"required,min=1"`
+	Desc     string `json:"desc,omitempty" validate:"omitempty,max=500"`
+	ImageURL string `json:"image_url,omitempty" validate:"omitempty,url"`
 }
 
 // Bill Response
@@ -127,8 +128,8 @@ type BillResponse struct {
 	Amount            int64     `json:"amount"`
 	ExpiredDate       string    `json:"expired_date"`
 	RedirectURL       string    `json:"redirect_url"`
-	IsAddressRequired bool      `json:"is_address_required"`
-	IsPhoneRequired   bool      `json:"is_phone_required"`
+	IsAddressRequired int       `json:"is_address_required"`
+	IsPhoneRequired   int       `json:"is_phone_number_required"`
 	Step              int       `json:"step"`
 	CreatedFrom       string    `json:"created_from"`
 	Status            string    `json:"status"`
@@ -171,8 +172,8 @@ type GetBillResponse struct {
 	Amount            int64                 `json:"amount"`
 	ExpiredDate       string                `json:"expired_date"`
 	RedirectURL       string                `json:"redirect_url"`
-	IsAddressRequired bool                  `json:"is_address_required"`
-	IsPhoneRequired   bool                  `json:"is_phone_required"`
+	IsAddressRequired int                   `json:"is_address_required"`
+	IsPhoneRequired   int                   `json:"is_phone_number_required"`
 	Step              int                   `json:"step"`
 	CreatedFrom       string                `json:"created_from"`
 	Status            string                `json:"status"`
@@ -220,22 +221,22 @@ type FlipPaymentResponse struct {
 
 // FlipPaymentRequestData represents the data needed to create a payment
 type FlipPaymentRequestData struct {
-	TransactionID         string                  `json:"transaction_id"`
-	Title                 string                  `json:"title"`
-	Amount                int64                   `json:"amount"`
-	ExpiryHours           int                     `json:"expiry_hours"` // Hours from now
-	PaymentMethod         FlipPaymentMethod       `json:"payment_method"`
-	CustomerName          *string                 `json:"customer_name,omitempty"`
-	CustomerEmail         *string                 `json:"customer_email,omitempty"`
-	CustomerPhone         *string                 `json:"customer_phone,omitempty"`
-	CustomerAddress       *string                 `json:"customer_address,omitempty"`
-	RedirectURL           *string                 `json:"redirect_url,omitempty"`
+	TransactionID         string                  `json:"transaction_id" validate:"required,max=255"`
+	Title                 string                  `json:"title" validate:"required,max=255"`
+	Amount                int64                   `json:"amount" validate:"required,min=100"`
+	ExpiryHours           int                     `json:"expiry_hours" validate:"required,min=1,max=168"` // Hours from now, max 7 days
+	PaymentMethod         FlipPaymentMethod       `json:"payment_method" validate:"required"`
+	CustomerName          *string                 `json:"customer_name,omitempty" validate:"omitempty,max=255"`
+	CustomerEmail         *string                 `json:"customer_email,omitempty" validate:"omitempty,email"`
+	CustomerPhone         *string                 `json:"customer_phone,omitempty" validate:"omitempty,max=20"`
+	CustomerAddress       *string                 `json:"customer_address,omitempty" validate:"omitempty,max=500"`
+	RedirectURL           *string                 `json:"redirect_url,omitempty" validate:"omitempty,url"`
 	VABank                *FlipVABank             `json:"va_bank,omitempty"`
 	EWalletProvider       *FlipEWalletProvider    `json:"ewallet_provider,omitempty"`
 	CreditCardProvider    *FlipCreditCardProvider `json:"credit_card_provider,omitempty"`
 	RetailProvider        *FlipRetailProvider     `json:"retail_provider,omitempty"`
 	DirectDebitBank       *FlipDirectDebitBank    `json:"direct_debit_bank,omitempty"`
-	ReferenceID           *string                 `json:"reference_id,omitempty"`
+	ReferenceID           *string                 `json:"reference_id,omitempty" validate:"omitempty,max=255"`
 	ChargeFee             bool                    `json:"charge_fee,omitempty"`
 	ItemDetails           []ItemDetail            `json:"item_details,omitempty"`
 	IsAddressRequired     bool                    `json:"is_address_required,omitempty"`
@@ -277,14 +278,14 @@ type FlipMaintenanceBankInfo struct {
 
 // ========== DISBURSEMENT/MONEY TRANSFER MODELS ==========
 
-// BankAccountInquiryRequest represents bank account inquiry request
+// Bank Account Inquiry Request
 type BankAccountInquiryRequest struct {
-	AccountNumber string `json:"account_number" form:"account_number"`
-	BankCode      string `json:"bank_code" form:"bank_code"`
-	InquiryKey    string `json:"inquiry_key,omitempty" form:"inquiry_key"`
+	AccountNumber string `json:"account_number" form:"account_number" validate:"required,max=50"`
+	BankCode      string `json:"bank_code" form:"bank_code" validate:"required,max=10"`
+	InquiryKey    string `json:"inquiry_key,omitempty" form:"inquiry_key" validate:"omitempty,max=100"`
 }
 
-// BankAccountInquiryResponse represents bank account inquiry response
+// Bank Account Inquiry Response
 type BankAccountInquiryResponse struct {
 	BankCode      string `json:"bank_code"`
 	AccountNumber string `json:"account_number"`
@@ -293,33 +294,33 @@ type BankAccountInquiryResponse struct {
 	InquiryKey    string `json:"inquiry_key,omitempty"`
 }
 
-// DisbursementRequest represents money transfer request
+// Disbursement Request
 type DisbursementRequest struct {
-	AccountNumber    string `json:"account_number" form:"account_number"`
-	BankCode         string `json:"bank_code" form:"bank_code"`
-	Amount           int64  `json:"amount" form:"amount"`
-	Remark           string `json:"remark,omitempty" form:"remark"`
-	RecipientCity    string `json:"recipient_city,omitempty" form:"recipient_city"`
-	BeneficiaryEmail string `json:"beneficiary_email,omitempty" form:"beneficiary_email"`
+	AccountNumber    string `json:"account_number" form:"account_number" validate:"required,max=50"`
+	BankCode         string `json:"bank_code" form:"bank_code" validate:"required,max=10"`
+	Amount           int64  `json:"amount" form:"amount" validate:"required,min=10000"`
+	Remark           string `json:"remark,omitempty" form:"remark" validate:"omitempty,max=255"`
+	RecipientCity    string `json:"recipient_city,omitempty" form:"recipient_city" validate:"omitempty,max=100"`
+	BeneficiaryEmail string `json:"beneficiary_email,omitempty" form:"beneficiary_email" validate:"omitempty,email"`
 	IdempotencyKey   string `json:"-"` // Sent as header
 	Timestamp        string `json:"-"` // Sent as header
 }
 
-// SpecialDisbursementRequest represents special money transfer request
+// Special Disbursement Request
 type SpecialDisbursementRequest struct {
 	DisbursementRequest
-	SenderCountry        string `json:"sender_country" form:"sender_country"`
-	SenderPlaceOfBirth   string `json:"sender_place_of_birth,omitempty" form:"sender_place_of_birth"`
-	SenderDateOfBirth    string `json:"sender_date_of_birth,omitempty" form:"sender_date_of_birth"`
-	SenderIdentityType   string `json:"sender_identity_type,omitempty" form:"sender_identity_type"`
-	SenderName           string `json:"sender_name" form:"sender_name"`
-	SenderAddress        string `json:"sender_address" form:"sender_address"`
-	SenderIdentityNumber string `json:"sender_identity_number,omitempty" form:"sender_identity_number"`
-	SenderJob            string `json:"sender_job,omitempty" form:"sender_job"`
-	Direction            string `json:"direction" form:"direction"`
+	SenderCountry        string `json:"sender_country" form:"sender_country" validate:"required,max=50"`
+	SenderPlaceOfBirth   string `json:"sender_place_of_birth,omitempty" form:"sender_place_of_birth" validate:"omitempty,max=100"`
+	SenderDateOfBirth    string `json:"sender_date_of_birth,omitempty" form:"sender_date_of_birth" validate:"omitempty,datetime=2006-01-02"`
+	SenderIdentityType   string `json:"sender_identity_type,omitempty" form:"sender_identity_type" validate:"omitempty,max=20"`
+	SenderName           string `json:"sender_name" form:"sender_name" validate:"required,max=255"`
+	SenderAddress        string `json:"sender_address" form:"sender_address" validate:"required,max=500"`
+	SenderIdentityNumber string `json:"sender_identity_number,omitempty" form:"sender_identity_number" validate:"omitempty,max=50"`
+	SenderJob            string `json:"sender_job,omitempty" form:"sender_job" validate:"omitempty,max=100"`
+	Direction            string `json:"direction" form:"direction" validate:"required,oneof=DOMESTIC INTERNATIONAL"`
 }
 
-// DisbursementResponse represents disbursement response
+// Disbursement Response
 type DisbursementResponse struct {
 	ID             int                 `json:"id"`
 	UserID         int                 `json:"user_id"`
@@ -344,7 +345,7 @@ type DisbursementResponse struct {
 	IdempotencyKey string              `json:"idempotency_key"`
 }
 
-// DisbursementSender represents sender information in disbursement
+// Disbursement Sender
 type DisbursementSender struct {
 	SenderName           string `json:"sender_name"`
 	SenderAddress        string `json:"sender_address"`
@@ -356,7 +357,7 @@ type DisbursementSender struct {
 	SenderIdentityType   string `json:"sender_identity_type"`
 }
 
-// DisbursementListResponse represents list of disbursements response
+// Disbursement List Response
 type DisbursementListResponse struct {
 	Data        []DisbursementResponse `json:"data"`
 	TotalData   int                    `json:"total_data"`
@@ -365,7 +366,7 @@ type DisbursementListResponse struct {
 	Page        int                    `json:"page"`
 }
 
-// DisbursementStatus represents disbursement status constants
+// Disbursement Status
 type DisbursementStatus string
 
 const (
@@ -375,7 +376,7 @@ const (
 	DisbursementStatusCancelled DisbursementStatus = "CANCELLED"
 )
 
-// DisbursementIdentityType represents identity type constants
+// Disbursement Identity Type
 type DisbursementIdentityType string
 
 const (
@@ -387,20 +388,20 @@ const (
 
 // ========== GSALT SPECIFIC MODELS ==========
 
-// GSALTDisbursementRequest represents GSALT-specific disbursement request
+// GSALT Disbursement Request
 type GSALTDisbursementRequest struct {
-	TransactionID  string `json:"transaction_id"`
-	RecipientName  string `json:"recipient_name"`
-	AccountNumber  string `json:"account_number"`
-	BankCode       string `json:"bank_code"`
-	AmountGSALT    int64  `json:"amount_gsalt"` // Amount in GSALT units
-	AmountIDR      int64  `json:"amount_idr"`   // Amount in IDR
-	Description    string `json:"description,omitempty"`
-	RecipientEmail string `json:"recipient_email,omitempty"`
-	IdempotencyKey string `json:"idempotency_key"`
+	TransactionID  string `json:"transaction_id" validate:"required,max=255"`
+	RecipientName  string `json:"recipient_name" validate:"required,max=255"`
+	AccountNumber  string `json:"account_number" validate:"required,max=50"`
+	BankCode       string `json:"bank_code" validate:"required,max=10"`
+	AmountGSALT    int64  `json:"amount_gsalt" validate:"required,min=1"`   // Amount in GSALT units
+	AmountIDR      int64  `json:"amount_idr" validate:"required,min=10000"` // Amount in IDR
+	Description    string `json:"description,omitempty" validate:"omitempty,max=500"`
+	RecipientEmail string `json:"recipient_email,omitempty" validate:"omitempty,email"`
+	IdempotencyKey string `json:"idempotency_key" validate:"required,max=255"`
 }
 
-// GSALTDisbursementResponse represents GSALT disbursement response
+// GSALT Disbursement Response
 type GSALTDisbursementResponse struct {
 	TransactionID  string             `json:"transaction_id"`
 	DisbursementID int                `json:"disbursement_id"`
@@ -415,4 +416,36 @@ type GSALTDisbursementResponse struct {
 	ProcessedAt    *time.Time         `json:"processed_at,omitempty"`
 	CompletedAt    *time.Time         `json:"completed_at,omitempty"`
 	IdempotencyKey string             `json:"idempotency_key"`
+}
+
+// Payment Method Details for specific payment methods like QR codes, VA numbers, etc.
+type PaymentMethodDetails struct {
+	LinkID            int    `json:"link_id"`
+	LinkURL           string `json:"link_url"`
+	Status            string `json:"status"`
+	Amount            int64  `json:"amount"`
+	ExpiredDate       string `json:"expired_date"`
+	PaymentURL        string `json:"payment_url"`
+	SenderName        string `json:"sender_name,omitempty"`
+	SenderEmail       string `json:"sender_email,omitempty"`
+	SenderPhoneNumber string `json:"sender_phone_number,omitempty"`
+
+	// Payment method identification
+	Method      FlipPaymentMethod `json:"method"`                 // Payment method type
+	Provider    string            `json:"provider,omitempty"`     // Provider name (e.g., bank name, ewallet provider)
+	AccountInfo string            `json:"account_info,omitempty"` // Account specific info (e.g., VA number, account number)
+
+	// Payment method specific fields
+	QRCodeURL    string `json:"qr_code_url,omitempty"`    // For QRIS payments
+	QRCodeString string `json:"qr_code_string,omitempty"` // For QRIS payments
+	VANumber     string `json:"va_number,omitempty"`      // For Virtual Account payments
+	VABank       string `json:"va_bank,omitempty"`        // For Virtual Account payments
+	EWalletURL   string `json:"ewallet_url,omitempty"`    // For E-wallet payments
+	RetailCode   string `json:"retail_code,omitempty"`    // For retail outlet payments
+}
+
+// FlipPaymentResponseWithDetails combines basic payment response with detailed payment method information
+type FlipPaymentResponseWithDetails struct {
+	FlipPaymentResponse  FlipPaymentResponse   `json:"payment_response"`
+	PaymentMethodDetails *PaymentMethodDetails `json:"payment_method_details"`
 }

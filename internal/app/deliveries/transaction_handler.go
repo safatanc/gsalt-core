@@ -56,12 +56,12 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
-	var dto models.TransactionCreateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.TransactionCreateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	transaction, err := h.transactionService.CreateTransaction(&dto)
+	transaction, err := h.transactionService.CreateTransaction(&req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -125,12 +125,12 @@ func (h *TransactionHandler) GetMyTransactions(c *fiber.Ctx) error {
 func (h *TransactionHandler) UpdateTransaction(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	var dto models.TransactionUpdateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.TransactionUpdateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	transaction, err := h.transactionService.UpdateTransaction(id, &dto)
+	transaction, err := h.transactionService.UpdateTransaction(id, &req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

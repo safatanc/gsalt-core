@@ -22,9 +22,9 @@ func NewVoucherService(db *gorm.DB, validator *infrastructures.Validator) *Vouch
 	}
 }
 
-func (s *VoucherService) CreateVoucher(req *models.VoucherCreateDto) (*models.Voucher, error) {
+func (s *VoucherService) CreateVoucher(req *models.VoucherCreateRequest) (*models.Voucher, error) {
 	if err := s.validator.Validate(req); err != nil {
-		return nil, errors.NewBadRequestError(err.Error())
+		return nil, err
 	}
 
 	// Check if voucher code already exists
@@ -159,9 +159,9 @@ func (s *VoucherService) GetVouchers(pagination *models.PaginationRequest, statu
 	return result, nil
 }
 
-func (s *VoucherService) UpdateVoucher(voucherId string, req *models.VoucherUpdateDto) (*models.Voucher, error) {
+func (s *VoucherService) UpdateVoucher(voucherId string, req *models.VoucherUpdateRequest) (*models.Voucher, error) {
 	if err := s.validator.Validate(req); err != nil {
-		return nil, errors.NewBadRequestError(err.Error())
+		return nil, err
 	}
 
 	voucher, err := s.GetVoucher(voucherId)

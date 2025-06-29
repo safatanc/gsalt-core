@@ -28,9 +28,9 @@ func NewVoucherRedemptionService(db *gorm.DB, validator *infrastructures.Validat
 	}
 }
 
-func (s *VoucherRedemptionService) CreateRedemption(req *models.VoucherRedemptionCreateDto) (*models.VoucherRedemption, error) {
+func (s *VoucherRedemptionService) CreateRedemption(req *models.VoucherRedemptionCreateRequest) (*models.VoucherRedemption, error) {
 	if err := s.validator.Validate(req); err != nil {
-		return nil, errors.NewBadRequestError(err.Error())
+		return nil, err
 	}
 
 	// Parse UUIDs
@@ -201,9 +201,9 @@ func (s *VoucherRedemptionService) GetRedemptionsByVoucher(voucherId string, pag
 	return result, nil
 }
 
-func (s *VoucherRedemptionService) UpdateRedemption(redemptionId string, req *models.VoucherRedemptionUpdateDto) (*models.VoucherRedemption, error) {
+func (s *VoucherRedemptionService) UpdateRedemption(redemptionId string, req *models.VoucherRedemptionUpdateRequest) (*models.VoucherRedemption, error) {
 	if err := s.validator.Validate(req); err != nil {
-		return nil, errors.NewBadRequestError(err.Error())
+		return nil, err
 	}
 
 	redemption, err := s.GetRedemption(redemptionId)
@@ -335,18 +335,11 @@ func (s *VoucherRedemptionService) RedeemVoucher(accountId, voucherCode string) 
 		return nil, nil, errors.NewInternalServerError(err, "Failed to create voucher redemption transaction")
 	}
 
-	// Convert transaction ID string to UUID
-	transactionUUID, err := uuid.Parse(transaction.ID)
-	if err != nil {
-		tx.Rollback()
-		return nil, nil, errors.NewInternalServerError(err, "Failed to parse transaction ID")
-	}
-
 	// Create redemption record
 	redemption := &models.VoucherRedemption{
 		VoucherID:     voucher.ID,
 		AccountID:     account.ConnectID,
-		TransactionID: &transactionUUID,
+		TransactionID: &transaction.ID,
 	}
 
 	if err := tx.Create(redemption).Error; err != nil {

@@ -40,12 +40,12 @@ func (h *VoucherRedemptionHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *VoucherRedemptionHandler) CreateRedemption(c *fiber.Ctx) error {
-	var dto models.VoucherRedemptionCreateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.VoucherRedemptionCreateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	redemption, err := h.voucherRedemptionService.CreateRedemption(&dto)
+	redemption, err := h.voucherRedemptionService.CreateRedemption(&req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -151,12 +151,12 @@ func (h *VoucherRedemptionHandler) GetRedemptionsByVoucher(c *fiber.Ctx) error {
 func (h *VoucherRedemptionHandler) UpdateRedemption(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	var dto models.VoucherRedemptionUpdateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.VoucherRedemptionUpdateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	redemption, err := h.voucherRedemptionService.UpdateRedemption(id, &dto)
+	redemption, err := h.voucherRedemptionService.UpdateRedemption(id, &req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

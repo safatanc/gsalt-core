@@ -4,17 +4,19 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type FlipConfig struct {
-	SecretKey    string
-	Environment  string // "sandbox" or "production"
-	BaseURL      string
-	WebhookToken string
-	CallbackURL  string
-	SuccessURL   string
-	FailureURL   string
+	SecretKey          string
+	Environment        string // "sandbox" or "production"
+	BaseURL            string
+	WebhookToken       string
+	CallbackURL        string
+	SuccessURL         string
+	FailureURL         string
+	DefaultRedirectURL string
 }
 
 type FlipClient struct {
@@ -31,15 +33,19 @@ func NewFlipClient() *FlipClient {
 		Environment: Config.FlipConfig.Environment,
 	}
 
-	// Set base URL based on environment for V3 API
+	// Set base URL based on environment - No version, let each endpoint handle its own version
 	if config.Environment == "production" {
-		config.BaseURL = "https://bigflip.id/api/v3"
+		config.BaseURL = "https://bigflip.id/api"
 	} else {
-		config.BaseURL = "https://bigflip.id/big_sandbox_api/v3"
+		config.BaseURL = "https://bigflip.id/big_sandbox_api"
 	}
 
-	// Create basic auth header
-	authString := base64.StdEncoding.EncodeToString([]byte(config.SecretKey + ":"))
+	// Create basic auth header - Flip requires secret key with colon
+	secretKey := config.SecretKey
+	if secretKey != "" && !strings.HasSuffix(secretKey, ":") {
+		secretKey += ":" // Add colon if not present
+	}
+	authString := base64.StdEncoding.EncodeToString([]byte(secretKey))
 	authHeader := "Basic " + authString
 
 	return &FlipClient{
@@ -65,4 +71,12 @@ func (c *FlipClient) GetBaseURL() string {
 // GetFullURL constructs the full URL for an endpoint
 func (c *FlipClient) GetFullURL(endpoint string) string {
 	return fmt.Sprintf("%s%s", c.BaseURL, endpoint)
+}
+
+// GetDefaultRedirectURL returns the default redirect URL from configuration
+func (c *FlipClient) GetDefaultRedirectURL() string {
+	if Config != nil && Config.FlipConfig != nil && Config.FlipConfig.DefaultRedirectURL != "" {
+		return Config.FlipConfig.DefaultRedirectURL
+	}
+	return "https://gsalt.com/payment/success" // Fallback default
 }

@@ -38,17 +38,17 @@ func (h *VoucherHandler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *VoucherHandler) CreateVoucher(c *fiber.Ctx) error {
-	var dto models.VoucherCreateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.VoucherCreateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
 	// Set created by from authenticated account
 	account := c.Locals("account").(*models.Account)
 	createdBy := account.ConnectID.String()
-	dto.CreatedBy = &createdBy
+	req.CreatedBy = &createdBy
 
-	voucher, err := h.voucherService.CreateVoucher(&dto)
+	voucher, err := h.voucherService.CreateVoucher(&req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -129,12 +129,12 @@ func (h *VoucherHandler) GetVouchers(c *fiber.Ctx) error {
 func (h *VoucherHandler) UpdateVoucher(c *fiber.Ctx) error {
 	id := c.Params("id")
 
-	var dto models.VoucherUpdateDto
-	if err := c.BodyParser(&dto); err != nil {
+	var req models.VoucherUpdateRequest
+	if err := c.BodyParser(&req); err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	voucher, err := h.voucherService.UpdateVoucher(id, &dto)
+	voucher, err := h.voucherService.UpdateVoucher(id, &req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

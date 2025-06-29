@@ -47,7 +47,7 @@ type Voucher struct {
 	DeletedAt          gorm.DeletedAt   `gorm:"index" json:"deleted_at"`
 }
 
-type VoucherCreateDto struct {
+type VoucherCreateRequest struct {
 	Code               string           `json:"code" validate:"required,max=50"`
 	Name               string           `json:"name" validate:"required,max=255"`
 	Description        *string          `json:"description,omitempty" validate:"omitempty,max=1000"`
@@ -63,7 +63,7 @@ type VoucherCreateDto struct {
 	CreatedBy          *string          `json:"created_by,omitempty" validate:"omitempty,uuid"`
 }
 
-type VoucherUpdateDto struct {
+type VoucherUpdateRequest struct {
 	Code               *string          `json:"code,omitempty" validate:"omitempty,max=50"`
 	Name               *string          `json:"name,omitempty" validate:"omitempty,max=255"`
 	Description        *string          `json:"description,omitempty" validate:"omitempty,max=1000"`
@@ -77,4 +77,9 @@ type VoucherUpdateDto struct {
 	ValidFrom          *time.Time       `json:"valid_from,omitempty"`
 	ValidUntil         *time.Time       `json:"valid_until,omitempty"`
 	Status             *VoucherStatus   `json:"status,omitempty" validate:"omitempty,oneof=ACTIVE INACTIVE REDEEMED EXPIRED"`
+}
+
+type VoucherRedeemRequest struct {
+	Code      string `json:"code" validate:"required,max=50"`
+	AccountID string `json:"account_id" validate:"required,uuid"`
 }

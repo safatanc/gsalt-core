@@ -214,6 +214,42 @@ USD to GSALT: $100 × exchange_rate = X GSALT = X × 100 units
 
 GSalt Core integrates with Flip for Business (BigFlip) V3 API to process external payments for topup transactions and handle withdrawals via disbursement. The integration supports comprehensive payment methods and handles the complete payment lifecycle with transparent fee structure.
 
+### Service Architecture
+
+The Flip integration is organized into two main service layers:
+
+#### FlipService (API Layer)
+- **General API Methods**: Balance, banks, maintenance info
+- **Accept Payment V2**: Bill creation, payment processing, status tracking
+- **Disbursement API**: Bank account validation, money transfer, withdrawal processing
+- **Business Logic Methods**: Enhanced payment processing with detailed payment method information
+
+#### TransactionService (Business Layer)
+- Uses FlipService for external payment processing
+- Handles topup transactions with automatic fee calculation
+- Manages payment confirmations via webhooks
+- Processes withdrawals with GSALT to IDR conversion
+
+### Enhanced Features
+
+#### Payment Processing
+- **CreateTopupPaymentWithDetails**: Creates payment bills with comprehensive payment method information
+- **ConvertPaymentResponseToJSON**: Converts payment responses to JSON for storage
+- **Payment Method Details**: Detailed breakdown for each payment method (QR codes, VA numbers, checkout URLs)
+- **Automatic Fee Calculation**: Transparent fee structure with user-paid processing fees
+- **Expiry Management**: Configurable payment expiry times (1-168 hours)
+
+#### Withdrawal System
+- **ValidateBankAccount**: Real-time bank account validation
+- **CheckDisbursementAvailability**: Service maintenance status checking
+- **CreateGSALTDisbursement**: GSALT-specific disbursement with automatic conversion
+- **GetSupportedBanks**: Dynamic list of operational banks
+
+#### Data Models
+- **Enhanced Models**: Complete payment method support with detailed field definitions
+- **Error Handling**: Structured error responses with detailed messages
+- **Type Safety**: Comprehensive enum definitions for payment methods and statuses
+
 ### Fee Structure (User-Paid)
 
 All fees are paid by the user (sender/buyer) and calculated automatically:
@@ -250,6 +286,44 @@ All fees are paid by the user (sender/buyer) and calculated automatically:
 - **Charge Fee**: Transparent fee charging to users
 - **Enhanced Payment Methods**: Complete payment method configuration
 - **Checkout Flow**: Seamless checkout experience
+- **Payment Method Details**: Comprehensive payment information for all supported methods
+- **Automatic Conversion**: GSALT to IDR conversion with configurable exchange rates
+- **Service Availability**: Real-time maintenance and service status checking
+
+### Code Organization
+
+#### API Methods (FlipService)
+```go
+// General API
+GetBalance(ctx) - Retrieve account balance
+GetBanks(ctx) - Get supported banks list
+GetMaintenanceInfo(ctx) - Check service status
+
+// Payment Processing
+CreateBill(ctx, req) - Create payment bill
+GetBill(ctx, billID) - Get bill status
+CreateTopupPaymentWithDetails(ctx, req) - Enhanced payment creation
+
+// Disbursement
+BankAccountInquiry(ctx, req) - Validate bank account
+CreateDisbursement(ctx, req) - Process withdrawal
+CreateGSALTDisbursement(ctx, req) - GSALT-specific withdrawal
+```
+
+#### Helper Methods
+```go
+// Payment Method Configuration
+setPaymentMethodFields() - Configure payment method specific fields
+createPaymentMethodDetails() - Generate detailed payment information
+
+// Data Conversion
+ConvertPaymentResponseToJSON() - Convert responses to JSON
+ConvertGSALTToIDR() - Currency conversion
+
+// Validation
+ValidateBankAccount() - Bank account validation
+CheckDisbursementAvailability() - Service availability check
+```
 
 ### Transaction Status Management
 
@@ -580,7 +654,7 @@ Create a new transaction manually.
 }
 ```
 
-### GET /transactions/me
+### GET /transactions
 Get current user's transactions with pagination.
 
 **Headers:** `Authorization: Bearer <token>`
@@ -633,7 +707,7 @@ Get specific transaction by ID.
 
 **Response:** Same format as single transaction object
 
-### PATCH /transactions/:id
+### PUT /transactions/:id
 Update transaction status and details.
 
 **Headers:** `Authorization: Bearer <token>`
@@ -685,7 +759,7 @@ Process balance topup via external payment or direct credit.
 - `payment_amount`: Actual payment amount (optional, auto-calculated if not provided)
 - `payment_currency`: Payment currency (optional, defaults to IDR)
 - `payment_method`: Payment method (optional, defaults to QRIS)
-- **External Payment Methods** (`QRIS`, `VIRTUAL_ACCOUNT`, `EWALLET`, `RETAIL_OUTLET`, `CARDLESS_CREDIT`, `CARD`): Creates pending transaction, requires Flip payment
+- **External Payment Methods** (`QRIS`, `VA_*`, `EWALLET_*`, `RETAIL_*`, `CREDIT_CARD`, `DEBIT_CARD`): Creates pending transaction, requires Flip payment
 - **Direct Credit**: Other payment methods immediately complete transaction
 
 **Response (External Payment):**
@@ -712,68 +786,6 @@ Process balance topup via external payment or direct credit.
       "qr_code": "00020101021226820014com.flip...",
       "expiry_time": "2024-01-01T10:00:00Z",
       "created_at": "2024-01-01T00:00:00Z"
-    }
-  }
-}
-```
-
-**Payment Instructions by Method:**
-
-*QRIS:*
-```json
-"payment_instructions": {
-  "payment_request_id": "flip-id-123",
-  "qr_code": "00020101021226820014com.flip...",
-  "payment_method": "QR_CODE",
-  "amount": 10000,
-  "currency": "IDR",
-  "expiry_time": "2024-01-01T10:00:00Z"
-}
-```
-
-*Virtual Account:*
-```json
-"payment_instructions": {
-  "payment_request_id": "flip-id-123",
-  "virtual_account": {
-    "bank_code": "BCA",
-    "account_number": "1234567890"
-  },
-  "payment_method": "VIRTUAL_ACCOUNT",
-  "amount": 10000,
-  "currency": "IDR",
-  "expiry_time": "2024-01-01T10:00:00Z"
-}
-```
-
-*E-Wallet:*
-```json
-"payment_instructions": {
-  "payment_request_id": "flip-id-123",
-  "ewallet": {
-    "provider": "OVO",
-    "checkout_url": "https://checkout.ovo.id/payment/..."
-  },
-  "payment_method": "EWALLET",
-  "amount": 10000,
-  "currency": "IDR",
-  "expiry_time": "2024-01-01T10:00:00Z"
-}
-```
-
-**Response (Direct Credit):**
-```json
-{
-  "success": true,
-  "data": {
-    "transaction": {
-      "id": "uuid",
-      "type": "topup",
-      "amount_gsalt_units": 1000,
-      "payment_amount": 10000,
-      "payment_currency": "IDR",
-      "payment_method": "DIRECT_CREDIT",
-      "status": "completed"
     }
   }
 }
@@ -894,10 +906,43 @@ Process payment (can use GSALT balance or external payment with comprehensive pa
 }
 ```
 
-**Fee Calculation:**
-- **QRIS**: 100 GSALT × 0.7% = 0.7 GSALT (70 units)
-- **Total**: 100 GSALT + 0.7 GSALT = 100.7 GSALT (10,070 units)
-- **IDR Amount**: 100.7 GSALT × 1000 = 100,700 IDR
+### GET /transactions/payment/methods
+Get supported payment methods with calculated fees.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `amount` (optional): Amount for fee calculation (default: 100)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "method": "VA_BCA",
+      "name": "Virtual Account BCA",
+      "type": "virtual_account",
+      "fee": 4000,
+      "description": "Transfer melalui Virtual Account BCA"
+    },
+    {
+      "method": "QRIS",
+      "name": "QRIS",
+      "type": "qris",
+      "fee": 2000,
+      "description": "Bayar dengan scan QR Code"
+    },
+    {
+      "method": "EWALLET_OVO",
+      "name": "OVO",
+      "type": "ewallet",
+      "fee": 5000,
+      "description": "Bayar dengan OVO"
+    }
+  ]
+}
+```
 
 ### POST /transactions/:id/confirm
 Confirm pending payment transaction (admin or webhook use).
@@ -1043,7 +1088,7 @@ Get available balance for withdrawal.
 - `balance_gsalt`: Available balance in GSALT decimal format
 - `balance_idr`: Equivalent IDR amount (1 GSALT = 1,000 IDR)
 
-### GET /transactions/withdrawal/:id/status
+### POST /transactions/withdrawal/:id/status
 Check withdrawal transaction status.
 
 **Headers:** `Authorization: Bearer <token>`
@@ -1076,7 +1121,7 @@ Check withdrawal transaction status.
 - `completed`: Bank transfer completed successfully
 - `failed`: Withdrawal failed, balance refunded
 
-### POST /transactions/withdrawal/validate
+### POST /transactions/withdrawal/validate-bank-account
 Validate bank account before withdrawal.
 
 **Headers:** `Authorization: Bearer <token>`
@@ -1113,7 +1158,7 @@ Validate bank account before withdrawal.
 
 ## Webhook Endpoints
 
-### POST /webhooks/flip/payment
+### POST /transactions/webhook/flip
 Handle payment notifications from Flip (no authentication required).
 
 **Request Body:**
@@ -1648,8 +1693,178 @@ IDR to GSALT: 1,000,000 IDR ÷ 1000 = 1000 GSALT = 100,000 units
 USD to GSALT: $100 × exchange_rate = X GSALT = X × 100 units
 ```
 
+---
+
+## Environment Variables
+
+Configure the following environment variables in your `.env` file:
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=password
+DB_NAME=gsalt_core
+DB_SSL_MODE=disable
+
+# Server Configuration
+APP_PORT=8080
+APP_ENV=development
+APP_BASE_URL=http://localhost:8080
+
+# JWT Configuration
+JWT_SECRET=your-jwt-secret-key
+JWT_EXPIRES_IN=24h
+
+# Safatanc Connect Configuration
+CONNECT_API_URL=https://connect.safatanc.com/api
+CONNECT_CLIENT_ID=your-connect-client-id
+CONNECT_CLIENT_SECRET=your-connect-client-secret
+
+# Flip Configuration
+FLIP_SECRET_KEY=your-flip-secret-key
+FLIP_WEBHOOK_TOKEN=your-webhook-verification-token
+FLIP_ENVIRONMENT=sandbox # or "production"
+FLIP_PRODUCTION_URL=https://bigflip.id/api/v3
+FLIP_SANDBOX_URL=https://bigflip.id/big_sandbox_api/v3
+FLIP_CALLBACK_URL=https://your-app.com/api/v1/webhooks/flip/payment
+FLIP_SUCCESS_URL=https://your-app.com/payment/success
+FLIP_FAILURE_URL=https://your-app.com/payment/failure
+
+# Redis Configuration (Optional)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Logging Configuration
+LOG_LEVEL=info
+LOG_FORMAT=json
+```
+
+---
+
+## Database Schema
+
+The system uses PostgreSQL with the following main tables:
+
+### accounts
+- `connect_id` (UUID, Primary Key): Link to Safatanc Connect user
+- `balance` (BIGINT): Balance in GSALT units
+- `points` (BIGINT): Loyalty points
+- `created_at`, `updated_at` (TIMESTAMP)
+
+### transactions
+- `id` (UUID, Primary Key): Transaction ID
+- `account_id` (UUID): Reference to account
+- `type` (VARCHAR): Transaction type
+- `amount_gsalt_units` (BIGINT): Amount in GSALT units
+- `status` (VARCHAR): Transaction status
+- `payment_method` (VARCHAR): Payment method used
+- `external_reference_id` (VARCHAR): External payment reference
+- `payment_instructions` (JSONB): Payment instructions from Flip
+- `created_at`, `updated_at` (TIMESTAMP)
+
+### vouchers
+- `id` (UUID, Primary Key): Voucher ID
+- `code` (VARCHAR, Unique): Voucher code
+- `name` (VARCHAR): Voucher name
+- `type` (VARCHAR): Voucher type
+- `value` (DECIMAL): Voucher value
+- `currency` (VARCHAR): Currency
+- `max_redeem_count` (INTEGER): Maximum redemptions
+- `current_redeem_count` (INTEGER): Current redemptions
+- `valid_from`, `valid_until` (TIMESTAMP): Validity period
+- `status` (VARCHAR): Voucher status
+- `created_at`, `updated_at` (TIMESTAMP)
+
+### voucher_redemptions
+- `id` (UUID, Primary Key): Redemption ID
+- `voucher_id` (UUID): Reference to voucher
+- `account_id` (UUID): Reference to account
+- `transaction_id` (UUID): Reference to transaction
+- `redeemed_at` (TIMESTAMP): Redemption timestamp
+
+---
+
+## Error Handling
+
+The system implements comprehensive error handling:
+
+### HTTP Status Codes
+- `200 OK`: Successful request
+- `201 Created`: Resource created successfully
+- `400 Bad Request`: Invalid request data
+- `401 Unauthorized`: Authentication required
+- `403 Forbidden`: Access denied
+- `404 Not Found`: Resource not found
+- `409 Conflict`: Resource conflict (e.g., duplicate)
+- `422 Unprocessable Entity`: Validation errors
+- `500 Internal Server Error`: Server error
+
+### Error Response Format
+```json
+{
+  "success": false,
+  "message": "Error description",
+  "errors": {
+    "field_name": ["Validation error message"]
+  }
+}
+```
+
+### Validation Errors
+The system uses `go-playground/validator` for request validation with detailed error messages.
+
+---
+
+## Security Features
+
+### Authentication & Authorization
+- **JWT-based Authentication**: Secure token-based authentication
+- **Role-based Access Control**: Different access levels for different user types
+- **Token Expiration**: Configurable token expiration times
+- **Refresh Token Support**: Secure token refresh mechanism
+
+### Data Protection
+- **SQL Injection Prevention**: Parameterized queries with GORM
+- **XSS Protection**: Input sanitization and output encoding
+- **CORS Configuration**: Configurable cross-origin resource sharing
+- **Rate Limiting**: API rate limiting to prevent abuse
+
+### Transaction Security
+- **Atomic Operations**: Database transactions for data consistency
+- **Idempotency Keys**: Prevent duplicate transactions
+- **Row-level Locking**: Prevent race conditions
+- **Audit Trail**: Complete transaction history and logging
+
+### Payment Security
+- **Webhook Verification**: Signature verification for Flip webhooks
+- **Secure API Keys**: Encrypted storage of sensitive credentials
+- **PCI Compliance**: Secure handling of payment data
+- **Fraud Detection**: Basic fraud detection mechanisms
+
+---
+
 ## Support
 
-For questions and support, contact Safatanc Group development team.
+For questions and support, contact Safatanc Group development team:
+
+- **Email**: dev@safatanc.com
+- **Documentation**: [GSalt Core Documentation](https://docs.gsalt.safatanc.com)
+- **API Reference**: [GSalt Core API](https://api.gsalt.safatanc.com/docs)
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
+
+### License
+
+This project is proprietary software owned by Safatanc Group.
 
 **Built with love by Safatanc Group**

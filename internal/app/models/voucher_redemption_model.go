@@ -16,12 +16,12 @@ type VoucherRedemption struct {
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 }
 
-type VoucherRedemptionCreateDto struct {
+type VoucherRedemptionCreateRequest struct {
 	VoucherID     string  `json:"voucher_id" validate:"required,uuid"`
 	AccountID     string  `json:"account_id" validate:"required,uuid"`
 	TransactionID *string `json:"transaction_id,omitempty" validate:"omitempty,uuid"`
 }
 
-type VoucherRedemptionUpdateDto struct {
+type VoucherRedemptionUpdateRequest struct {
 	TransactionID *string `json:"transaction_id,omitempty" validate:"omitempty,uuid"`
 }

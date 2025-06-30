@@ -136,6 +136,58 @@ type BillResponse struct {
 	Created           time.Time `json:"created"`
 }
 
+// PaymentGatewayResponse is a comprehensive response struct for Flip's Create Bill API
+type PaymentGatewayResponse struct {
+	LinkID                int              `json:"link_id"`
+	LinkURL               string           `json:"link_url"`
+	Title                 string           `json:"title"`
+	Type                  string           `json:"type"`
+	Amount                int64            `json:"amount"`
+	RedirectURL           string           `json:"redirect_url"`
+	ExpiredDate           *string          `json:"expired_date"` // Use pointer for nullable fields
+	CreatedFrom           string           `json:"created_from,omitempty"`
+	Status                string           `json:"status"`
+	Step                  int              `json:"step"`
+	Customer              *CustomerDetails `json:"customer,omitempty"`
+	BillPayment           *BillPayment     `json:"bill_payment,omitempty"` // Pointer, as it's not always present
+	PaymentURL            string           `json:"payment_url,omitempty"`
+	Instructions          string           `json:"instructions,omitempty"`
+	InternalReference     string           `json:"internal_reference,omitempty"`
+	PaymentMethod         string           `json:"payment_method,omitempty"`
+	SenderBank            string           `json:"sender_bank,omitempty"`
+	SenderBankType        string           `json:"sender_bank_type,omitempty"`
+	IsAddressRequired     int              `json:"is_address_required"`
+	IsPhoneNumberRequired int              `json:"is_phone_number_required"`
+	CreatedAt             int64            `json:"created_at,omitempty"`
+}
+
+type CustomerDetails struct {
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Address string `json:"address"`
+	Phone   string `json:"phone"`
+}
+
+type BillPayment struct {
+	ID                  string               `json:"id"`
+	Amount              int64                `json:"amount"`
+	UniqueCode          int                  `json:"unique_code"`
+	Status              string               `json:"status"`
+	SenderBank          string               `json:"sender_bank"`
+	SenderBankType      string               `json:"sender_bank_type"`
+	ReceiverBankAccount *ReceiverBankAccount `json:"receiver_bank_account,omitempty"`
+	UserAddress         string               `json:"user_address,omitempty"`
+	UserPhone           string               `json:"user_phone,omitempty"`
+	CreatedAt           int64                `json:"created_at"` // Assuming Unix timestamp
+}
+
+type ReceiverBankAccount struct {
+	AccountNumber string `json:"account_number"`
+	AccountType   string `json:"account_type"`
+	BankCode      string `json:"bank_code"`
+	AccountHolder string `json:"account_holder"`
+}
+
 // Payment Status
 type FlipPaymentStatus string
 

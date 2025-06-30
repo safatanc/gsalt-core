@@ -134,7 +134,7 @@ func (s *FlipService) GetMaintenanceInfo(ctx context.Context) (*models.FlipMaint
 
 // CreateBill creates a new payment bill using V2 API
 // POST {{base_url_v2}}/pwf/bill
-func (s *FlipService) CreateBill(ctx context.Context, req models.CreateBillRequest) (*models.BillResponse, error) {
+func (s *FlipService) CreateBill(ctx context.Context, req models.CreateBillRequest) (*models.PaymentGatewayResponse, error) {
 	// Convert request to form data
 	formData := s.createBillRequestToFormData(req)
 
@@ -161,7 +161,7 @@ func (s *FlipService) CreateBill(ctx context.Context, req models.CreateBillReque
 		return nil, s.handleAPIError(resp.StatusCode, body)
 	}
 
-	var billResp models.BillResponse
+	var billResp models.PaymentGatewayResponse
 	if err := json.Unmarshal(body, &billResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}

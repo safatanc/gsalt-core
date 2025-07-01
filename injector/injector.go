@@ -19,16 +19,24 @@ type Application struct {
 	TransactionHandler       *deliveries.TransactionHandler
 	VoucherHandler           *deliveries.VoucherHandler
 	VoucherRedemptionHandler *deliveries.VoucherRedemptionHandler
+	RateLimitMiddleware      *middlewares.RateLimitMiddleware
+	APIKeyMiddleware         *middlewares.APIKeyMiddleware
 }
 
 // RegisterRoutes registers all application routes using a Fiber router
 func (app *Application) RegisterRoutes(router fiber.Router) {
-	// You'll need to implement these RegisterRoutes methods within your handlers
-	// For example, in deliveries/account_handler.go, you'd have:
-	// func (h *AccountHandler) RegisterRoutes(router fiber.Router) {
-	//     router.Get("/accounts", h.GetAllAccounts)
-	//     router.Post("/accounts", h.CreateAccount)
-	// }
+	// Apply global rate limit for public API
+	router.Use(app.RateLimitMiddleware.LimitByIP(middlewares.PublicAPILimit))
+
+	// Auth endpoints with stricter rate limit
+	authGroup := router.Group("/auth")
+	authGroup.Use(app.RateLimitMiddleware.LimitByIP(middlewares.AuthLimit))
+
+	// Protected API endpoints with user-based rate limit
+	protectedGroup := router.Group("")
+	protectedGroup.Use(app.RateLimitMiddleware.LimitByUser(middlewares.AuthenticatedAPILimit))
+
+	// Register all handlers
 	app.HealthHandler.RegisterRoutes(router)
 	app.AccountHandler.RegisterRoutes(router)
 	app.TransactionHandler.RegisterRoutes(router)
@@ -39,8 +47,12 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 // Infrastructure providers
 var infrastructureSet = wire.NewSet(
 	infrastructures.NewDatabase,
+	infrastructures.NewRedisClient,
 	infrastructures.NewValidator,
 	infrastructures.NewFlipClient,
+	wire.Value("gsalt"),
+	wire.Bind(new(middlewares.RateLimiter), new(*middlewares.RedisRateLimiter)),
+	middlewares.NewRedisRateLimiter,
 )
 
 // Service providers
@@ -52,11 +64,15 @@ var serviceSet = wire.NewSet(
 	services.NewTransactionService,
 	services.NewVoucherService,
 	services.NewVoucherRedemptionService,
+	services.NewAuditService,
+	services.NewMerchantAPIKeyService,
 )
 
 // Middleware providers
 var middlewareSet = wire.NewSet(
 	middlewares.NewAuthMiddleware,
+	middlewares.NewAPIKeyMiddleware,
+	middlewares.NewRateLimitMiddleware,
 )
 
 // Handler providers

@@ -46,10 +46,19 @@ type TransactionService struct {
 	flipService          *FlipService
 	connectService       *ConnectService
 	paymentMethodService *PaymentMethodService
+	auditService         *AuditService
 	limits               TransactionLimits
 }
 
-func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, accountService *AccountService, flipService *FlipService, connectService *ConnectService, paymentMethodService *PaymentMethodService) *TransactionService {
+func NewTransactionService(
+	db *gorm.DB,
+	validator *infrastructures.Validator,
+	accountService *AccountService,
+	flipService *FlipService,
+	connectService *ConnectService,
+	paymentMethodService *PaymentMethodService,
+	auditService *AuditService,
+) *TransactionService {
 	return &TransactionService{
 		db:                   db,
 		validator:            validator,
@@ -57,6 +66,7 @@ func NewTransactionService(db *gorm.DB, validator *infrastructures.Validator, ac
 		flipService:          flipService,
 		connectService:       connectService,
 		paymentMethodService: paymentMethodService,
+		auditService:         auditService,
 		limits:               defaultLimits,
 	}
 }
@@ -279,6 +289,9 @@ func (s *TransactionService) UpdateTransaction(transactionId string, req *models
 		return nil, errors.NewInternalServerError(err, "Failed to find transaction")
 	}
 
+	// Store old state for audit
+	oldTransaction := transaction
+
 	// Parse UUID fields if provided
 	relatedTransactionUUID, err := s.parseOptionalUUID(req.RelatedTransactionID, "related transaction ID")
 	if err != nil {
@@ -299,10 +312,32 @@ func (s *TransactionService) UpdateTransaction(transactionId string, req *models
 	updates := map[string]interface{}{}
 
 	if req.Status != nil {
+		oldStatus := transaction.Status
 		updates["status"] = *req.Status
 		if *req.Status == models.TransactionStatusCompleted {
 			now := time.Now()
 			updates["completed_at"] = &now
+		}
+
+		// Log status change
+		metadata := map[string]interface{}{
+			"payment_method":           transaction.PaymentMethod,
+			"external_payment_id":      transaction.ExternalPaymentID,
+			"processing_status":        transaction.Status,
+			"amount_gsalt_units":       transaction.AmountGsaltUnits,
+			"fee_gsalt_units":          transaction.FeeGsaltUnits,
+			"total_amount_gsalt_units": transaction.TotalAmountGsaltUnits,
+		}
+
+		if err := s.auditService.LogTransactionStatusChange(
+			transaction.ID,
+			oldStatus,
+			*req.Status,
+			"Status updated via UpdateTransaction",
+			metadata,
+			nil, // TODO: Add user ID from context
+		); err != nil {
+			return nil, err
 		}
 	}
 	if req.ExchangeRateIDR != nil {
@@ -345,6 +380,18 @@ func (s *TransactionService) UpdateTransaction(transactionId string, req *models
 	// Apply updates
 	if err := s.db.Model(&transaction).Updates(updates).Error; err != nil {
 		return nil, errors.NewInternalServerError(err, "Failed to update transaction")
+	}
+
+	// Log the entire change
+	if err := s.auditService.LogAudit(
+		"transactions",
+		transaction.ID,
+		models.AuditActionUpdate,
+		oldTransaction,
+		transaction,
+		nil, // TODO: Add user ID from context
+	); err != nil {
+		return nil, err
 	}
 
 	return &transaction, nil
@@ -1407,4 +1454,42 @@ func (s *TransactionService) RejectPayment(transactionId string, reason *string)
 	}
 
 	return &transaction, nil
+}
+
+// DeleteTransaction performs soft delete on a transaction
+func (s *TransactionService) DeleteTransaction(transactionId string) error {
+	transactionUUID, err := s.parseUUID(transactionId, "transaction ID")
+	if err != nil {
+		return err
+	}
+
+	var transaction models.Transaction
+	if err := s.db.First(&transaction, "id = ?", transactionUUID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.NewNotFoundError("Transaction not found")
+		}
+		return errors.NewInternalServerError(err, "Failed to find transaction")
+	}
+
+	// Store transaction state before deletion
+	deletedTransaction := transaction
+
+	// Perform soft delete
+	if err := s.db.Delete(&transaction).Error; err != nil {
+		return errors.NewInternalServerError(err, "Failed to delete transaction")
+	}
+
+	// Log the deletion
+	if err := s.auditService.LogAudit(
+		"transactions",
+		transaction.ID,
+		models.AuditActionDelete,
+		deletedTransaction,
+		nil,
+		nil, // TODO: Add user ID from context
+	); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -319,3 +319,136 @@ Handles payment notifications from Flip. This endpoint does not require authenti
 }
 ```
 The service will find the corresponding transaction using the `bill_link_id` (stored as `external_payment_id`) and update its status to "COMPLETED" or "FAILED".
+
+### API Key Management
+
+#### POST /api-keys
+Creates a new API key for a merchant.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.APIKeyCreateRequest`
+```json
+{
+  "key_name": "Production API Key",
+  "scopes": ["READ", "WRITE", "PAYMENT"],
+  "rate_limit": 1000,
+  "expires_at": "2025-01-01T00:00:00Z"
+}
+```
+- **Response (201 Created):**
+```json
+{
+    "success": true,
+    "data": {
+        "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+        "merchant_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+        "key_name": "Production API Key",
+        "api_key": "gsalt_prod_1234567890abcdef",
+        "prefix": "gsalt_prod_",
+        "scopes": ["READ", "WRITE", "PAYMENT"],
+        "rate_limit": 1000,
+        "expires_at": "2025-01-01T00:00:00Z",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z"
+    }
+}
+```
+
+#### GET /api-keys
+Lists all API keys for the authenticated merchant.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+            "merchant_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+            "key_name": "Production API Key",
+            "prefix": "gsalt_prod_",
+            "scopes": ["READ", "WRITE", "PAYMENT"],
+            "rate_limit": 1000,
+            "last_used_at": "2024-01-01T12:00:00Z",
+            "expires_at": "2025-01-01T00:00:00Z",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }
+    ]
+}
+```
+
+#### PATCH /api-keys/:id
+Updates an existing API key.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.APIKeyUpdateRequest`
+```json
+{
+  "key_name": "Updated API Key Name",
+  "scopes": ["READ", "WRITE"],
+  "rate_limit": 500,
+  "expires_at": "2025-06-01T00:00:00Z"
+}
+```
+- **Response (200 OK):** Same structure as GET /api-keys response for a single key
+
+#### DELETE /api-keys/:id
+Revokes an API key.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": null
+}
+```
+
+### Rate Limiting
+
+The API implements rate limiting based on different factors:
+
+1. **IP-based Rate Limiting** (Public API)
+   - Applies to all public endpoints
+   - Default limit: Configurable per environment
+   - Headers returned:
+     - `X-RateLimit-Limit`: Maximum requests per window
+     - `X-RateLimit-Remaining`: Remaining requests in current window
+     - `X-RateLimit-Reset`: Unix timestamp when the rate limit resets
+
+2. **User-based Rate Limiting** (Authenticated API)
+   - Applies to endpoints requiring authentication
+   - Limit tied to user account
+   - Same headers as IP-based rate limiting
+
+3. **API Key Rate Limiting** (Merchant API)
+   - Applies when using API key authentication
+   - Limit specified during API key creation
+   - Same headers as IP-based rate limiting
+
+When rate limit is exceeded, the API returns:
+- **Status**: 429 Too Many Requests
+- **Response Body**:
+```json
+{
+    "success": false,
+    "error": {
+        "code": "TOO_MANY_REQUESTS",
+        "message": "Rate limit exceeded",
+        "limit": 100,
+        "reset": 1704067200
+    }
+}
+```
+
+### Authentication Headers
+
+The API supports two authentication methods:
+
+1. **Connect Token Authentication**
+   ```
+   Authorization: Bearer <connect_token>
+   ```
+
+2. **API Key Authentication**
+   ```
+   X-API-Key: gsalt_prod_1234567890abcdef
+   ```

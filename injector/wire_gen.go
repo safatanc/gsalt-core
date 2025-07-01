@@ -29,21 +29,34 @@ func InitializeApplication() (*Application, error) {
 	flipClient := infrastructures.NewFlipClient()
 	flipService := services.NewFlipService(flipClient)
 	paymentMethodService := services.NewPaymentMethodService(db, validator)
-	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService, paymentMethodService)
+	auditService := services.NewAuditService(db)
+	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService, paymentMethodService, auditService)
 	transactionHandler := deliveries.NewTransactionHandler(transactionService, paymentMethodService, authMiddleware)
 	voucherService := services.NewVoucherService(db, validator)
 	voucherHandler := deliveries.NewVoucherHandler(voucherService, authMiddleware)
 	voucherRedemptionService := services.NewVoucherRedemptionService(db, validator, voucherService, accountService, transactionService)
 	voucherRedemptionHandler := deliveries.NewVoucherRedemptionHandler(voucherRedemptionService, authMiddleware)
+	client := infrastructures.NewRedisClient()
+	string2 := _wireStringValue
+	redisRateLimiter := middlewares.NewRedisRateLimiter(client, string2)
+	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(redisRateLimiter)
+	merchantAPIKeyService := services.NewMerchantAPIKeyService(db)
+	apiKeyMiddleware := middlewares.NewAPIKeyMiddleware(merchantAPIKeyService, redisRateLimiter)
 	application := &Application{
 		HealthHandler:            healthHandler,
 		AccountHandler:           accountHandler,
 		TransactionHandler:       transactionHandler,
 		VoucherHandler:           voucherHandler,
 		VoucherRedemptionHandler: voucherRedemptionHandler,
+		RateLimitMiddleware:      rateLimitMiddleware,
+		APIKeyMiddleware:         apiKeyMiddleware,
 	}
 	return application, nil
 }
+
+var (
+	_wireStringValue = "gsalt"
+)
 
 // injector.go:
 
@@ -54,10 +67,20 @@ type Application struct {
 	TransactionHandler       *deliveries.TransactionHandler
 	VoucherHandler           *deliveries.VoucherHandler
 	VoucherRedemptionHandler *deliveries.VoucherRedemptionHandler
+	RateLimitMiddleware      *middlewares.RateLimitMiddleware
+	APIKeyMiddleware         *middlewares.APIKeyMiddleware
 }
 
 // RegisterRoutes registers all application routes using a Fiber router
 func (app *Application) RegisterRoutes(router fiber.Router) {
+
+	router.Use(app.RateLimitMiddleware.LimitByIP(middlewares.PublicAPILimit))
+
+	authGroup := router.Group("/auth")
+	authGroup.Use(app.RateLimitMiddleware.LimitByIP(middlewares.AuthLimit))
+
+	protectedGroup := router.Group("")
+	protectedGroup.Use(app.RateLimitMiddleware.LimitByUser(middlewares.AuthenticatedAPILimit))
 
 	app.HealthHandler.RegisterRoutes(router)
 	app.AccountHandler.RegisterRoutes(router)
@@ -67,13 +90,13 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 }
 
 // Infrastructure providers
-var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewValidator, infrastructures.NewFlipClient)
+var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewRedisClient, infrastructures.NewValidator, infrastructures.NewFlipClient, wire.Value("gsalt"), wire.Bind(new(middlewares.RateLimiter), new(*middlewares.RedisRateLimiter)), middlewares.NewRedisRateLimiter)
 
 // Service providers
-var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewPaymentMethodService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService)
+var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewPaymentMethodService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService, services.NewAuditService, services.NewMerchantAPIKeyService)
 
 // Middleware providers
-var middlewareSet = wire.NewSet(middlewares.NewAuthMiddleware)
+var middlewareSet = wire.NewSet(middlewares.NewAuthMiddleware, middlewares.NewAPIKeyMiddleware, middlewares.NewRateLimitMiddleware)
 
 // Handler providers
 var handlerSet = wire.NewSet(deliveries.NewHealthHandler, deliveries.NewAccountHandler, deliveries.NewTransactionHandler, deliveries.NewVoucherHandler, deliveries.NewVoucherRedemptionHandler, wire.Struct(new(Application), "*"))

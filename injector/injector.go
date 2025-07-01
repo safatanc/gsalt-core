@@ -47,6 +47,7 @@ var infrastructureSet = wire.NewSet(
 var serviceSet = wire.NewSet(
 	services.NewConnectService,
 	services.NewAccountService,
+	services.NewPaymentMethodService,
 	services.NewFlipService,
 	services.NewTransactionService,
 	services.NewVoucherService,

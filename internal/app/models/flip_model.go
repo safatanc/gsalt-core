@@ -8,6 +8,7 @@ import (
 type FlipPaymentMethod string
 
 const (
+	FlipPaymentMethodUnknown        FlipPaymentMethod = "UNKNOWN"
 	FlipPaymentMethodVirtualAccount FlipPaymentMethod = "VA"
 	FlipPaymentMethodQRIS           FlipPaymentMethod = "QRIS"
 	FlipPaymentMethodEWallet        FlipPaymentMethod = "EWALLET"

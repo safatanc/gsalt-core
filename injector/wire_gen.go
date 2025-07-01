@@ -28,8 +28,9 @@ func InitializeApplication() (*Application, error) {
 	accountHandler := deliveries.NewAccountHandler(accountService, authMiddleware)
 	flipClient := infrastructures.NewFlipClient()
 	flipService := services.NewFlipService(flipClient)
-	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService)
-	transactionHandler := deliveries.NewTransactionHandler(transactionService, authMiddleware)
+	paymentMethodService := services.NewPaymentMethodService(db, validator)
+	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService, paymentMethodService)
+	transactionHandler := deliveries.NewTransactionHandler(transactionService, paymentMethodService, authMiddleware)
 	voucherService := services.NewVoucherService(db, validator)
 	voucherHandler := deliveries.NewVoucherHandler(voucherService, authMiddleware)
 	voucherRedemptionService := services.NewVoucherRedemptionService(db, validator, voucherService, accountService, transactionService)
@@ -69,7 +70,7 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewValidator, infrastructures.NewFlipClient)
 
 // Service providers
-var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService)
+var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewPaymentMethodService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService)
 
 // Middleware providers
 var middlewareSet = wire.NewSet(middlewares.NewAuthMiddleware)

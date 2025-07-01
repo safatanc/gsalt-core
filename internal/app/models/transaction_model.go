@@ -69,23 +69,23 @@ func (t *Transaction) SetGsaltAmount(amount decimal.Decimal) {
 }
 
 // Helper method to parse payment instructions JSON
-func (t *Transaction) GetPaymentInstructionsAsMap() (map[string]interface{}, error) {
-	if t.PaymentInstructions == nil {
+func (t *Transaction) GetPaymentInstructions() (*PaymentGatewayResponse, error) {
+	if t.PaymentInstructions == nil || *t.PaymentInstructions == "" {
 		return nil, nil
 	}
 
-	var instructions map[string]interface{}
+	var instructions PaymentGatewayResponse
 	if err := json.Unmarshal([]byte(*t.PaymentInstructions), &instructions); err != nil {
 		return nil, err
 	}
 
-	return instructions, nil
+	return &instructions, nil
 }
 
 // TopupResponse represents the response for topup operations
 type TopupResponse struct {
-	Transaction         *Transaction           `json:"transaction"`
-	PaymentInstructions map[string]interface{} `json:"payment_instructions,omitempty"`
+	Transaction         *Transaction            `json:"transaction"`
+	PaymentInstructions *PaymentGatewayResponse `json:"payment_instructions,omitempty"`
 }
 
 type TransactionCreateRequest struct {

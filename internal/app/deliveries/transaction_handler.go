@@ -14,14 +14,16 @@ import (
 )
 
 type TransactionHandler struct {
-	transactionService *services.TransactionService
-	authMiddleware     *middlewares.AuthMiddleware
+	transactionService   *services.TransactionService
+	paymentMethodService *services.PaymentMethodService
+	authMiddleware       *middlewares.AuthMiddleware
 }
 
-func NewTransactionHandler(transactionService *services.TransactionService, authMiddleware *middlewares.AuthMiddleware) *TransactionHandler {
+func NewTransactionHandler(transactionService *services.TransactionService, paymentMethodService *services.PaymentMethodService, authMiddleware *middlewares.AuthMiddleware) *TransactionHandler {
 	return &TransactionHandler{
-		transactionService: transactionService,
-		authMiddleware:     authMiddleware,
+		transactionService:   transactionService,
+		paymentMethodService: paymentMethodService,
+		authMiddleware:       authMiddleware,
 	}
 }
 
@@ -43,7 +45,7 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	auth.Post("/topup", h.ProcessTopup)
 	auth.Post("/transfer", h.ProcessTransfer)
 	auth.Post("/payment", h.ProcessPayment)
-	auth.Get("/payment/methods", h.GetSupportedPaymentMethods)
+	auth.Get("/payment-methods", h.GetSupportedPaymentMethods)
 	auth.Post("/:id/confirm", h.ConfirmPayment)
 	auth.Post("/:id/reject", h.RejectPayment)
 
@@ -301,118 +303,19 @@ func (h *TransactionHandler) HandleFlipWebhook(c *fiber.Ctx) error {
 
 // GetSupportedPaymentMethods returns all supported payment methods with their fees
 func (h *TransactionHandler) GetSupportedPaymentMethods(c *fiber.Ctx) error {
-	amountStr := c.Query("amount")
-	var amount int64 = 100 // Default amount for fee calculation
-
-	if amountStr != "" {
-		if parsedAmount, err := strconv.ParseInt(amountStr, 10, 64); err == nil {
-			amount = parsedAmount
-		}
+	// 1. Bind filter from query parameters
+	var filter models.PaymentMethodFilter
+	if err := c.QueryParser(&filter); err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid query parameters"))
 	}
 
-	methods := []map[string]interface{}{
-		{
-			"method":      "VA_BCA",
-			"name":        "Virtual Account BCA",
-			"type":        "virtual_account",
-			"fee":         4000, // 4 GSALT = 4000 IDR
-			"description": "Transfer melalui Virtual Account BCA",
-		},
-		{
-			"method":      "VA_BNI",
-			"name":        "Virtual Account BNI",
-			"type":        "virtual_account",
-			"fee":         4000,
-			"description": "Transfer melalui Virtual Account BNI",
-		},
-		{
-			"method":      "VA_BRI",
-			"name":        "Virtual Account BRI",
-			"type":        "virtual_account",
-			"fee":         4000,
-			"description": "Transfer melalui Virtual Account BRI",
-		},
-		{
-			"method":      "VA_MANDIRI",
-			"name":        "Virtual Account Mandiri",
-			"type":        "virtual_account",
-			"fee":         4000,
-			"description": "Transfer melalui Virtual Account Mandiri",
-		},
-		{
-			"method":      "QRIS",
-			"name":        "QRIS",
-			"type":        "qris",
-			"fee":         max(amount*7/1000*1000, 2000), // 0.7% or min 2000 IDR
-			"description": "Bayar dengan scan QR Code",
-		},
-		{
-			"method":      "EWALLET_OVO",
-			"name":        "OVO",
-			"type":        "ewallet",
-			"fee":         5000,
-			"description": "Bayar dengan OVO",
-		},
-		{
-			"method":      "EWALLET_DANA",
-			"name":        "DANA",
-			"type":        "ewallet",
-			"fee":         5000,
-			"description": "Bayar dengan DANA",
-		},
-		{
-			"method":      "EWALLET_GOPAY",
-			"name":        "GoPay",
-			"type":        "ewallet",
-			"fee":         5000,
-			"description": "Bayar dengan GoPay",
-		},
-		{
-			"method":      "EWALLET_SHOPEEPAY",
-			"name":        "ShopeePay",
-			"type":        "ewallet",
-			"fee":         5000,
-			"description": "Bayar dengan ShopeePay",
-		},
-		{
-			"method":      "CREDIT_CARD",
-			"name":        "Credit Card",
-			"type":        "credit_card",
-			"fee":         max(amount*29/1000*1000, 10000), // 2.9% or min 10000 IDR
-			"description": "Bayar dengan Kartu Kredit",
-		},
-		{
-			"method":      "DEBIT_CARD",
-			"name":        "Debit Card",
-			"type":        "debit_card",
-			"fee":         max(amount*29/1000*1000, 10000), // 2.9% or min 10000 IDR
-			"description": "Bayar dengan Kartu Debit",
-		},
-		{
-			"method":      "RETAIL_ALFAMART",
-			"name":        "Alfamart",
-			"type":        "retail",
-			"fee":         5000,
-			"description": "Bayar di Alfamart",
-		},
-		{
-			"method":      "RETAIL_INDOMARET",
-			"name":        "Indomaret",
-			"type":        "retail",
-			"fee":         5000,
-			"description": "Bayar di Indomaret",
-		},
+	// 2. Call the service to get the methods
+	methods, err := h.paymentMethodService.GetPaymentMethods(&filter)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
 	}
 
 	return pkg.SuccessResponse(c, methods)
-}
-
-// max helper function
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // ProcessWithdrawal handles withdrawal processing

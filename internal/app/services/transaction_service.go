@@ -213,6 +213,19 @@ func (s *TransactionService) GetTransaction(transactionId string) (*models.Trans
 	return &transaction, nil
 }
 
+func (s *TransactionService) GetTransactionByRef(ref string) (*models.Transaction, error) {
+	var transaction models.Transaction
+	err := s.db.Where("external_reference_id = ?", ref).First(&transaction).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.NewNotFoundError("Transaction not found")
+		}
+		return nil, errors.NewInternalServerError(err, "Failed to get transaction")
+	}
+
+	return &transaction, nil
+}
+
 func (s *TransactionService) GetTransactionsByAccount(accountId string, pagination *models.PaginationRequest) (*models.Pagination[[]models.Transaction], error) {
 	accountUUID, err := s.parseUUID(accountId, "account ID")
 	if err != nil {

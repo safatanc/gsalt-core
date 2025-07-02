@@ -37,6 +37,7 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 
 	// Transaction CRUD
 	auth.Post("/", h.CreateTransaction)
+	auth.Get("/ref/:ref", h.GetTransactionByRef)
 	auth.Get("/:id", h.GetTransaction)
 	auth.Get("/", h.GetMyTransactions)
 	auth.Put("/:id", h.UpdateTransaction)
@@ -75,6 +76,17 @@ func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 	transaction, err := h.transactionService.GetTransaction(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, transaction)
+}
+
+func (h *TransactionHandler) GetTransactionByRef(c *fiber.Ctx) error {
+	ref := c.Params("ref")
+
+	transaction, err := h.transactionService.GetTransactionByRef(ref)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}

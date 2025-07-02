@@ -29,16 +29,17 @@ func NewTransactionHandler(transactionService *services.TransactionService, paym
 
 func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	transactionGroup := router.Group("/transactions")
+
 	// Public routes (no auth required)
 	transactionGroup.Post("/webhook/flip", h.HandleFlipWebhook)
+	transactionGroup.Get("/ref/:ref", h.GetTransactionByRef)
+	transactionGroup.Get("/:id", h.GetTransaction)
 
 	// Protected routes (auth required)
 	auth := transactionGroup.Group("/", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount)
 
 	// Transaction CRUD
 	auth.Post("/", h.CreateTransaction)
-	auth.Get("/ref/:ref", h.GetTransactionByRef)
-	auth.Get("/:id", h.GetTransaction)
 	auth.Get("/", h.GetMyTransactions)
 	auth.Put("/:id", h.UpdateTransaction)
 

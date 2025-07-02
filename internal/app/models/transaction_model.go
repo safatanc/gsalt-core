@@ -83,7 +83,7 @@ func (t *Transaction) GetPaymentInstructions() (*PaymentGatewayResponse, error) 
 }
 
 // TopupResponse represents the response for topup operations
-type TopupResponse struct {
+type TransactionResponse struct {
 	Transaction         *Transaction            `json:"transaction"`
 	PaymentInstructions *PaymentGatewayResponse `json:"payment_instructions,omitempty"`
 }

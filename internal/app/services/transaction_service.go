@@ -213,7 +213,7 @@ func (s *TransactionService) GetTransaction(transactionId string) (*models.Trans
 	return &transaction, nil
 }
 
-func (s *TransactionService) GetTransactionByRef(ref string) (*models.Transaction, error) {
+func (s *TransactionService) GetTransactionByRef(ref string) (*models.TransactionResponse, error) {
 	var transaction models.Transaction
 	err := s.db.Where("external_reference_id = ?", ref).First(&transaction).Error
 	if err != nil {
@@ -223,7 +223,12 @@ func (s *TransactionService) GetTransactionByRef(ref string) (*models.Transactio
 		return nil, errors.NewInternalServerError(err, "Failed to get transaction")
 	}
 
-	return &transaction, nil
+	paymentInstructions, _ := transaction.GetPaymentInstructions()
+
+	return &models.TransactionResponse{
+		Transaction:         &transaction,
+		PaymentInstructions: paymentInstructions,
+	}, nil
 }
 
 func (s *TransactionService) GetTransactionsByAccount(accountId string, pagination *models.PaginationRequest) (*models.Pagination[[]models.Transaction], error) {
@@ -426,7 +431,7 @@ func (s *TransactionService) createBaseTransaction(accountUUID uuid.UUID, txnTyp
 	}
 }
 
-func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethodCode *string, externalRefId *string) (*models.TopupResponse, error) {
+func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethodCode *string, externalRefId *string) (*models.TransactionResponse, error) {
 	// Parse UUID first
 	accountUUID, err := s.parseUUID(accountId, "account ID")
 	if err != nil {
@@ -459,7 +464,7 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		return nil, err
 	} else if existingTxn != nil {
 		paymentInstructions, _ := existingTxn.GetPaymentInstructions()
-		return &models.TopupResponse{
+		return &models.TransactionResponse{
 			Transaction:         existingTxn,
 			PaymentInstructions: paymentInstructions,
 		}, nil
@@ -555,7 +560,7 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 	}
 
 	paymentInstructions, _ := transaction.GetPaymentInstructions()
-	response := &models.TopupResponse{
+	response := &models.TransactionResponse{
 		Transaction:         transaction,
 		PaymentInstructions: paymentInstructions,
 	}

@@ -93,43 +93,78 @@ Gets the current user's account information.
 
 ### Transaction Management
 
+#### Public Transaction Endpoints
+
+#### GET /transactions/:id
+Gets a specific transaction by its ID.
+- **Middleware**: None (Public)
+- **Response (200 OK):** `models.Transaction`
+
+#### GET /transactions/ref/:ref
+Gets a specific transaction by its reference ID.
+- **Middleware**: None (Public)
+- **Response (200 OK):** `models.Transaction`
+
+#### POST /transactions/webhook/flip
+Handles payment notifications from Flip. This endpoint does not require authentication but should be secured with a webhook secret token.
+- **Request Body**: `models.FlipWebhookPayload`
+```json
+{
+    "id": 12345,
+    "bill_link_id": 67890,
+    "bill_title": "GSALT Topup - ...",
+    "status": "SUCCESSFUL",
+    "amount": 50000,
+    "...": "..."
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "status": "ok"
+}
+```
+
+#### Protected Transaction Endpoints
+
+#### POST /transactions
+Creates a new transaction.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.TransactionCreateRequest`
+- **Response (201 Created):** `models.Transaction`
+
+#### GET /transactions
+Gets the current user's transaction history with pagination.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Query Parameters**: 
+  - `page` (default: 1)
+  - `limit` (default: 10)
+  - `order` (asc/desc, default: desc)
+  - `order_field` (default: created_at)
+- **Response (200 OK):** `models.Pagination[[]models.Transaction]`
+
+#### PUT /transactions/:id
+Updates a transaction.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.TransactionUpdateRequest`
+- **Response (200 OK):** `models.Transaction`
+
+#### Transaction Operations
+
 #### POST /transactions/topup
-Processes a balance top-up request. Creates a pending transaction and returns payment instructions from Flip.
+Processes a balance top-up request.
 - **Middleware**: `AuthConnect`, `AuthAccount`
 - **Request Body**: `models.TopupRequest`
 ```json
 {
   "amount_gsalt": "100.00",
-  "payment_method": "QRIS"
+  "payment_method": "QRIS",
+  "payment_amount": 100000,
+  "payment_currency": "IDR",
+  "external_reference_id": "optional-reference"
 }
 ```
 - **Response (200 OK):** `models.TopupResponse`
-```json
-{
-    "success": true,
-    "data": {
-        "transaction": {
-            "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-            "account_id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
-            "type": "TOPUP",
-            "amount_gsalt_units": 10000,
-            "status": "PENDING",
-            "payment_method": "QRIS",
-            "external_payment_id": "227124",
-            "payment_instructions": "{\"link_id\":227124,\"link_url\":\"...\",\"status\":\"INACTIVE\",...}"
-        },
-        "payment_instructions": {
-            "link_id": 227124,
-            "link_url": "flip.id/pwf-sandbox/$safatanctechnologydigital/#...",
-            "payment_url": "flip.id/pwf-sandbox/$safatanctechnologydigital/#...",
-            "status": "INACTIVE",
-            "customer": { "name": "...", "email": "...", "phone": "..." },
-            "instructions": "Scan kode QR untuk pembayaran"
-        }
-    }
-}
-```
-*Note: `payment_instructions` in the response contains the full, deserialized JSON object from Flip for frontend use. The `transaction.payment_instructions` field stores this same object as a raw JSON string.*
 
 #### POST /transactions/transfer
 Transfers GSALT balance between two accounts.
@@ -168,15 +203,9 @@ Processes a payment using either GSALT balance or an external payment method via
 ```
 - **Response (200 OK):** `models.PaymentResponse`. The structure is similar to the Top-up response, providing payment details from Flip.
 
-#### GET /transactions
-Gets the current user's transaction history with pagination.
-- **Middleware**: `AuthConnect`, `AuthAccount`
-- **Query Parameters**: `page`, `limit`, `order`, `order_field`
-- **Response (200 OK):** `models.Pagination[[]models.Transaction]`
-
-#### GET /transactions/:id
-Gets a specific transaction by its ID.
-- **Middleware**: `AuthConnect`, `AuthAccount`
+#### GET /transactions/ref/:ref
+Gets a specific transaction by its reference ID.
+- **Middleware**: None (Public)
 - **Response (200 OK):** `models.Transaction`
 
 #### POST /transactions/:id/confirm
@@ -294,31 +323,6 @@ Redeems a voucher, which creates a transaction to credit the user's account.
     }
 }
 ```
-
----
-
-### Webhook Endpoints
-
-#### POST /webhooks/flip
-Handles payment notifications from Flip. This endpoint does not require authentication but should be secured with a webhook secret token.
-- **Request Body**: `models.FlipWebhookPayload`
-```json
-{
-    "id": 12345,
-    "bill_link_id": 67890,
-    "bill_title": "GSALT Topup - ...",
-    "status": "SUCCESSFUL",
-    "amount": 50000,
-    "...": "..."
-}
-```
-- **Response (200 OK):**
-```json
-{
-  "status": "ok"
-}
-```
-The service will find the corresponding transaction using the `bill_link_id` (stored as `external_payment_id`) and update its status to "COMPLETED" or "FAILED".
 
 ### API Key Management
 

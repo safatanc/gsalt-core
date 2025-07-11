@@ -2,26 +2,35 @@ package deliveries
 
 import (
 	"fmt"
-	"strconv"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/safatanc/gsalt-core/internal/app/errors"
 	"github.com/safatanc/gsalt-core/internal/app/middlewares"
 	"github.com/safatanc/gsalt-core/internal/app/models"
 	"github.com/safatanc/gsalt-core/internal/app/pkg"
 	"github.com/safatanc/gsalt-core/internal/app/services"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type TransactionHandler struct {
 	transactionService   *services.TransactionService
+	paymentService       *services.PaymentService
 	paymentMethodService *services.PaymentMethodService
 	authMiddleware       *middlewares.AuthMiddleware
 }
 
-func NewTransactionHandler(transactionService *services.TransactionService, paymentMethodService *services.PaymentMethodService, authMiddleware *middlewares.AuthMiddleware) *TransactionHandler {
+func NewTransactionHandler(
+	transactionService *services.TransactionService,
+	paymentService *services.PaymentService,
+	paymentMethodService *services.PaymentMethodService,
+	authMiddleware *middlewares.AuthMiddleware,
+) *TransactionHandler {
 	return &TransactionHandler{
 		transactionService:   transactionService,
+		paymentService:       paymentService,
 		paymentMethodService: paymentMethodService,
 		authMiddleware:       authMiddleware,
 	}
@@ -33,7 +42,6 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	// Public routes (no auth required)
 	transactionGroup.Post("/webhook/flip", h.HandleFlipWebhook)
 	transactionGroup.Get("/ref/:ref", h.GetTransactionByRef)
-	transactionGroup.Get("/:id", h.GetTransaction)
 
 	// Protected routes (auth required)
 	auth := transactionGroup.Group("/", h.authMiddleware.AuthConnect, h.authMiddleware.AuthAccount)
@@ -57,36 +65,88 @@ func (h *TransactionHandler) RegisterRoutes(router fiber.Router) {
 	auth.Get("/withdrawal/balance", h.GetWithdrawalBalance)
 	auth.Post("/withdrawal/:id/status", h.CheckWithdrawalStatus)
 	auth.Post("/withdrawal/validate-bank-account", h.ValidateBankAccountForWithdrawal)
+
+	// Move the :id route to the bottom to avoid catching other routes
+	transactionGroup.Get("/:id", h.GetTransaction)
 }
 
+// CreateTransaction handles transaction creation
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 	var req models.TransactionCreateRequest
 	if err := c.BodyParser(&req); err != nil {
-		return pkg.ErrorResponse(c, err)
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid request body"))
 	}
 
+	// Get account from context
+	account := c.Locals("account").(*models.Account)
+	if account == nil {
+		return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Account not found in context"))
+	}
+	req.AccountID = account.ConnectID.String()
+
+	// Create transaction
 	transaction, err := h.transactionService.CreateTransaction(&req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	return pkg.SuccessResponse(c, transaction)
+	return pkg.SuccessResponse(c, &models.TransactionResponse{
+		Transaction: transaction,
+	})
 }
 
-func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
+// UpdateTransaction handles transaction update
+func (h *TransactionHandler) UpdateTransaction(c *fiber.Ctx) error {
 	id := c.Params("id")
+	transactionID, err := uuid.Parse(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid transaction ID"))
+	}
 
-	transaction, err := h.transactionService.GetTransaction(id)
+	var req models.TransactionUpdateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid request body"))
+	}
+
+	// Update transaction
+	transaction, err := h.transactionService.UpdateTransaction(transactionID.String(), &req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	return pkg.SuccessResponse(c, transaction)
+	return pkg.SuccessResponse(c, &models.TransactionResponse{
+		Transaction: transaction,
+	})
 }
 
+// GetTransaction retrieves a transaction by ID
+func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
+	id := c.Params("id")
+	transactionID, err := uuid.Parse(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid transaction ID"))
+	}
+
+	transaction, err := h.transactionService.GetTransaction(transactionID.String())
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	// Get payment details if exists
+	details, err := h.paymentService.GetPaymentDetailsByTransactionID(c.Context(), transaction.ID)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, &models.TransactionResponse{
+		Transaction:    transaction,
+		PaymentDetails: details,
+	})
+}
+
+// GetTransactionByRef retrieves a transaction by external reference ID
 func (h *TransactionHandler) GetTransactionByRef(c *fiber.Ctx) error {
 	ref := c.Params("ref")
-
 	transaction, err := h.transactionService.GetTransactionByRef(ref)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
@@ -95,62 +155,49 @@ func (h *TransactionHandler) GetTransactionByRef(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, transaction)
 }
 
+// GetMyTransactions retrieves transactions for the authenticated user
 func (h *TransactionHandler) GetMyTransactions(c *fiber.Ctx) error {
+	// Get account from context
 	account := c.Locals("account").(*models.Account)
-
-	// Parse pagination from query parameters
-	var pagination models.PaginationRequest
-
-	// Parse page parameter
-	pageStr := c.Query("page", "1")
-	if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
-		pagination.Page = page
-	} else {
-		pagination.Page = 1
+	if account == nil {
+		return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Account not found in context"))
 	}
 
-	// Parse limit parameter
-	limitStr := c.Query("limit", "10")
-	if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
-		pagination.Limit = limit
-	} else {
-		pagination.Limit = 10
+	// Get pagination params
+	pagination := &models.PaginationRequest{
+		Page:  c.QueryInt("page", 1),
+		Limit: c.QueryInt("limit", 10),
 	}
 
-	// Parse order parameter
-	order := c.Query("order", "desc")
-	if order == "asc" || order == "desc" {
-		pagination.Order = order
-	} else {
-		pagination.Order = "desc"
-	}
-
-	// Parse order_field parameter
-	orderField := c.Query("order_field", "created_at")
-	pagination.OrderField = orderField
-
-	transactions, err := h.transactionService.GetTransactionsByAccount(account.ConnectID.String(), &pagination)
+	// Get transactions
+	result, err := h.transactionService.GetTransactionsByAccount(account.ConnectID.String(), pagination)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	return pkg.SuccessResponse(c, transactions)
-}
+	// Get payment details for each transaction
+	responses := make([]*models.TransactionResponse, 0)
+	for _, transaction := range result.Items {
+		details, err := h.paymentService.GetPaymentDetailsByTransactionID(c.Context(), transaction.ID)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return pkg.ErrorResponse(c, err)
+		}
 
-func (h *TransactionHandler) UpdateTransaction(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	var req models.TransactionUpdateRequest
-	if err := c.BodyParser(&req); err != nil {
-		return pkg.ErrorResponse(c, err)
+		responses = append(responses, &models.TransactionResponse{
+			Transaction:    &transaction,
+			PaymentDetails: details,
+		})
 	}
 
-	transaction, err := h.transactionService.UpdateTransaction(id, &req)
-	if err != nil {
-		return pkg.ErrorResponse(c, err)
-	}
-
-	return pkg.SuccessResponse(c, transaction)
+	return pkg.SuccessResponse(c, &models.Pagination[[]*models.TransactionResponse]{
+		Page:       result.Page,
+		Limit:      result.Limit,
+		TotalPages: result.TotalPages,
+		TotalItems: result.TotalItems,
+		HasNext:    result.HasNext,
+		HasPrev:    result.HasPrev,
+		Items:      responses,
+	})
 }
 
 func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
@@ -171,9 +218,7 @@ func (h *TransactionHandler) ProcessTopup(c *fiber.Ctx) error {
 	topupResponse, err := h.transactionService.ProcessTopup(
 		account.ConnectID.String(),
 		amountGsaltUnits,
-		req.PaymentAmount,
-		req.PaymentCurrency,
-		req.PaymentMethod,
+		*req.PaymentMethod,
 		req.ExternalReferenceID,
 	)
 	if err != nil {
@@ -216,10 +261,11 @@ func (h *TransactionHandler) ProcessTransfer(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, response)
 }
 
+// ProcessPayment handles payment transaction
 func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
 	var req models.PaymentRequest
 	if err := c.BodyParser(&req); err != nil {
-		return pkg.ErrorResponse(c, err)
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid request body"))
 	}
 
 	// Get account from context
@@ -230,23 +276,7 @@ func (h *TransactionHandler) ProcessPayment(c *fiber.Ctx) error {
 	req.AccountID = account.ConnectID.String()
 
 	// Process payment
-	response, err := h.transactionService.ProcessPayment(req)
-	if err != nil {
-		return pkg.ErrorResponse(c, err)
-	}
-
-	return pkg.SuccessResponse(c, response)
-}
-
-func (h *TransactionHandler) ConfirmPayment(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	var req models.ConfirmPaymentRequest
-	if err := c.BodyParser(&req); err != nil {
-		return pkg.ErrorResponse(c, err)
-	}
-
-	transaction, err := h.transactionService.ConfirmPayment(id, req.ExternalPaymentID)
+	transaction, err := h.transactionService.ProcessPayment(req)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -254,15 +284,63 @@ func (h *TransactionHandler) ConfirmPayment(c *fiber.Ctx) error {
 	return pkg.SuccessResponse(c, transaction)
 }
 
-func (h *TransactionHandler) RejectPayment(c *fiber.Ctx) error {
+// ConfirmPayment confirms a payment transaction
+func (h *TransactionHandler) ConfirmPayment(c *fiber.Ctx) error {
 	id := c.Params("id")
+	transactionID, err := uuid.Parse(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid transaction ID"))
+	}
 
-	var req models.RejectPaymentRequest
+	var req models.PaymentStatusUpdateRequest
 	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid request body"))
+	}
+
+	// Set status to completed
+	req.Status = models.PaymentStatusCompleted
+	now := time.Now()
+	req.PaymentTime = &now
+
+	// Update payment status
+	err = h.paymentService.UpdatePaymentStatus(c.Context(), transactionID, &req)
+	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
 
-	transaction, err := h.transactionService.RejectPayment(id, req.Reason)
+	// Get updated transaction
+	transaction, err := h.transactionService.GetTransaction(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	return pkg.SuccessResponse(c, transaction)
+}
+
+// RejectPayment rejects a payment transaction
+func (h *TransactionHandler) RejectPayment(c *fiber.Ctx) error {
+	id := c.Params("id")
+	transactionID, err := uuid.Parse(id)
+	if err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid transaction ID"))
+	}
+
+	var req models.PaymentStatusUpdateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid request body"))
+	}
+
+	// Set status to failed
+	req.Status = models.PaymentStatusFailed
+
+	// Update payment status
+	err = h.paymentService.UpdatePaymentStatus(c.Context(), transactionID, &req)
+	if err != nil {
+		return pkg.ErrorResponse(c, err)
+	}
+
+	// Get updated transaction
+	transaction, err := h.transactionService.GetTransaction(id)
 	if err != nil {
 		return pkg.ErrorResponse(c, err)
 	}
@@ -277,34 +355,44 @@ func (h *TransactionHandler) HandleFlipWebhook(c *fiber.Ctx) error {
 		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid webhook payload"))
 	}
 
-	// TODO: Verify webhook signature
-	// callbackToken := c.Get("X-CALLBACK-TOKEN")
-	// if !verifyFlipSignature(callbackToken, payload) {
-	//     return pkg.ErrorResponse(c, errors.NewUnauthorizedError("Invalid webhook signature"))
-	// }
-
 	// Process webhook based on payment status
-	// For Flip, we need to extract transaction ID from bill_title or use bill_link_id
 	transactionID := payload.BillTitle // Assuming we store transaction ID in bill title
+	txID, err := uuid.Parse(transactionID)
+	if err != nil {
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid transaction ID in bill title"))
+	}
+
 	billID := fmt.Sprintf("%d", payload.BillLinkID)
+	now := time.Now()
+
+	var req models.PaymentStatusUpdateRequest
+	req.ProviderPaymentID = &billID
+	req.PaymentTime = &now
 
 	switch payload.Status {
 	case models.FlipStatusSuccessful:
-		// Confirm the payment
-		_, err := h.transactionService.ConfirmPayment(transactionID, &billID)
-		if err != nil {
-			// Log error but don't return error to Flip to prevent retries
-			// In production, you might want to use a proper logger
-			fmt.Printf("Failed to confirm payment for transaction %s: %v\n", transactionID, err)
-		}
-	case models.FlipStatusFailed, models.FlipStatusExpired, models.FlipStatusCancelled:
-		// Reject the payment
-		reason := fmt.Sprintf("Payment %s in Flip", payload.Status)
-		_, err := h.transactionService.RejectPayment(transactionID, &reason)
-		if err != nil {
-			// Log error but don't return error to Flip to prevent retries
-			fmt.Printf("Failed to reject payment for transaction %s: %v\n", transactionID, err)
-		}
+		req.Status = models.PaymentStatusCompleted
+	case models.FlipStatusFailed:
+		req.Status = models.PaymentStatusFailed
+		desc := fmt.Sprintf("Payment failed in Flip: %s", payload.Status)
+		req.StatusDescription = &desc
+	case models.FlipStatusExpired:
+		req.Status = models.PaymentStatusExpired
+		desc := "Payment expired in Flip"
+		req.StatusDescription = &desc
+	case models.FlipStatusCancelled:
+		req.Status = models.PaymentStatusCancelled
+		desc := "Payment cancelled in Flip"
+		req.StatusDescription = &desc
+	default:
+		return pkg.ErrorResponse(c, errors.NewBadRequestError("Invalid payment status"))
+	}
+
+	// Update payment status
+	err = h.paymentService.UpdatePaymentStatus(c.Context(), txID, &req)
+	if err != nil {
+		// Log error but don't return error to Flip to prevent retries
+		fmt.Printf("Failed to update payment status for transaction %s: %v\n", transactionID, err)
 	}
 
 	// Always return success to Flip to prevent retries

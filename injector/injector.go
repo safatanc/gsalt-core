@@ -66,6 +66,7 @@ var serviceSet = wire.NewSet(
 	services.NewVoucherRedemptionService,
 	services.NewAuditService,
 	services.NewMerchantAPIKeyService,
+	services.NewPaymentService,
 )
 
 // Middleware providers

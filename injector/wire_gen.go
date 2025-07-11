@@ -29,9 +29,10 @@ func InitializeApplication() (*Application, error) {
 	flipClient := infrastructures.NewFlipClient()
 	flipService := services.NewFlipService(flipClient)
 	paymentMethodService := services.NewPaymentMethodService(db, validator)
+	paymentService := services.NewPaymentService(db, validator)
 	auditService := services.NewAuditService(db)
-	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService, paymentMethodService, auditService)
-	transactionHandler := deliveries.NewTransactionHandler(transactionService, paymentMethodService, authMiddleware)
+	transactionService := services.NewTransactionService(db, validator, accountService, flipService, connectService, paymentMethodService, paymentService, auditService)
+	transactionHandler := deliveries.NewTransactionHandler(transactionService, paymentService, paymentMethodService, authMiddleware)
 	voucherService := services.NewVoucherService(db, validator)
 	voucherHandler := deliveries.NewVoucherHandler(voucherService, authMiddleware)
 	voucherRedemptionService := services.NewVoucherRedemptionService(db, validator, voucherService, accountService, transactionService)
@@ -93,7 +94,7 @@ func (app *Application) RegisterRoutes(router fiber.Router) {
 var infrastructureSet = wire.NewSet(infrastructures.NewDatabase, infrastructures.NewRedisClient, infrastructures.NewValidator, infrastructures.NewFlipClient, wire.Value("gsalt"), wire.Bind(new(middlewares.RateLimiter), new(*middlewares.RedisRateLimiter)), middlewares.NewRedisRateLimiter)
 
 // Service providers
-var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewPaymentMethodService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService, services.NewAuditService, services.NewMerchantAPIKeyService)
+var serviceSet = wire.NewSet(services.NewConnectService, services.NewAccountService, services.NewPaymentMethodService, services.NewFlipService, services.NewTransactionService, services.NewVoucherService, services.NewVoucherRedemptionService, services.NewAuditService, services.NewMerchantAPIKeyService, services.NewPaymentService)
 
 // Middleware providers
 var middlewareSet = wire.NewSet(middlewares.NewAuthMiddleware, middlewares.NewAPIKeyMiddleware, middlewares.NewRateLimitMiddleware)

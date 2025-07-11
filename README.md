@@ -70,7 +70,7 @@ Checks the application's health status.
 Creates a new GSALT account for an authenticated Safatanc Connect user.
 - **Middleware**: `AuthConnect`
 - **Request Body**: None
-- **Response (201 Created):** `models.Account`
+- **Response (201 Created):**
 ```json
 {
     "success": true,
@@ -78,6 +78,9 @@ Creates a new GSALT account for an authenticated Safatanc Connect user.
         "connect_id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
         "balance": 0,
         "points": 0,
+        "account_type": "PERSONAL",
+        "status": "ACTIVE",
+        "kyc_status": "UNVERIFIED",
         "created_at": "2023-10-27T10:00:00Z",
         "updated_at": "2023-10-27T10:00:00Z"
     }
@@ -87,7 +90,23 @@ Creates a new GSALT account for an authenticated Safatanc Connect user.
 #### GET /accounts/me
 Gets the current user's account information.
 - **Middleware**: `AuthConnect`, `AuthAccount`
-- **Response (200 OK):** `models.Account` (Same structure as `POST /accounts`)
+- **Response (200 OK):** Same structure as `POST /accounts`
+
+#### DELETE /accounts/me
+Deletes the current user's GSALT account.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": null
+}
+```
+
+#### GET /accounts/:id
+Gets account information by ID.
+- **Middleware**: None (Public)
+- **Response (200 OK):** Same structure as `POST /accounts`
 
 ---
 
@@ -284,7 +303,9 @@ Gets the available balance for withdrawal (total balance minus pending withdrawa
 {
     "success": true,
     "data": {
-        "available_balance": 95000 
+        "balance_gsalt_units": 95000,
+        "balance_gsalt": "950.00",
+        "balance_idr": "950000.00"
     }
 }
 ```
@@ -296,13 +317,111 @@ Checks the status of a specific withdrawal transaction.
 
 ---
 
-### Voucher & Redemption
+### Voucher Management
 
 #### GET /vouchers
 Gets a list of all available vouchers with pagination.
 - **Middleware**: None (Public)
-- **Query Parameters**: `page`, `limit`, `status`, etc.
-- **Response (200 OK):** `models.Pagination[[]models.Voucher]`
+- **Query Parameters**: 
+  - `page` (default: 1)
+  - `limit` (default: 10)
+  - `order` (asc/desc, default: desc)
+  - `order_field` (default: created_at)
+  - `status` (optional): Filter by status (ACTIVE/INACTIVE/REDEEMED/EXPIRED)
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": {
+        "items": [
+            {
+                "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+                "code": "WELCOME2024",
+                "name": "Welcome Bonus",
+                "description": "New user welcome bonus",
+                "type": "BALANCE",
+                "value": "10.00",
+                "currency": "GSALT",
+                "max_redeem_count": 1000,
+                "current_redeem_count": 50,
+                "valid_from": "2024-01-01T00:00:00Z",
+                "valid_until": "2024-12-31T23:59:59Z",
+                "status": "ACTIVE",
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z"
+            }
+        ],
+        "total": 1,
+        "page": 1,
+        "limit": 10,
+        "total_pages": 1
+    }
+}
+```
+
+#### GET /vouchers/:id
+Gets a specific voucher by ID.
+- **Middleware**: None (Public)
+- **Response (200 OK):** Single voucher object (same structure as in list)
+
+#### GET /vouchers/code/:code
+Gets a specific voucher by code.
+- **Middleware**: None (Public)
+- **Response (200 OK):** Single voucher object
+
+#### POST /vouchers/validate/:code
+Validates a voucher code without redeeming it.
+- **Middleware**: None (Public)
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": {
+        "valid": true,
+        "voucher": { "... voucher object ..." }
+    }
+}
+```
+
+#### POST /vouchers
+Creates a new voucher.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.VoucherCreateRequest`
+```json
+{
+    "code": "WELCOME2024",
+    "name": "Welcome Bonus",
+    "description": "New user welcome bonus",
+    "type": "BALANCE",
+    "value": "10.00",
+    "currency": "GSALT",
+    "max_redeem_count": 1000,
+    "valid_from": "2024-01-01T00:00:00Z",
+    "valid_until": "2024-12-31T23:59:59Z"
+}
+```
+- **Response (201 Created):** Created voucher object
+
+#### PATCH /vouchers/:id
+Updates an existing voucher.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**: `models.VoucherUpdateRequest` (similar to create, all fields optional)
+- **Response (200 OK):** Updated voucher object
+
+#### DELETE /vouchers/:id
+Deletes a voucher.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": null
+}
+```
+
+---
+
+### Voucher Redemption
 
 #### POST /voucher-redemptions/redeem
 Redeems a voucher, which creates a transaction to credit the user's account.
@@ -310,7 +429,7 @@ Redeems a voucher, which creates a transaction to credit the user's account.
 - **Request Body**:
 ```json
 {
-  "voucher_code": "WELCOME2024"
+    "voucher_code": "WELCOME2024"
 }
 ```
 - **Response (200 OK):**
@@ -318,11 +437,85 @@ Redeems a voucher, which creates a transaction to credit the user's account.
 {
     "success": true,
     "data": {
-        "redemption": { "... models.VoucherRedemption ..." },
-        "transaction": { "... models.Transaction ..." }
+        "redemption": {
+            "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+            "voucher_id": "b1a2c3d4-e5f6-7890-1234-567890abcdef",
+            "account_id": "d4e5f6g7-h8i9-0123-4567-890abcdef123",
+            "redeemed_at": "2024-01-01T12:00:00Z",
+            "status": "COMPLETED"
+        },
+        "transaction": { "... transaction details ..." }
     }
 }
 ```
+
+#### GET /voucher-redemptions/me
+Gets the current user's voucher redemption history.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Query Parameters**: 
+  - `page` (default: 1)
+  - `limit` (default: 10)
+  - `order` (asc/desc, default: desc)
+  - `order_field` (default: redeemed_at)
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": {
+        "items": [
+            {
+                "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+                "voucher_id": "b1a2c3d4-e5f6-7890-1234-567890abcdef",
+                "voucher_code": "WELCOME2024",
+                "account_id": "d4e5f6g7-h8i9-0123-4567-890abcdef123",
+                "redeemed_at": "2024-01-01T12:00:00Z",
+                "status": "COMPLETED",
+                "transaction_id": "e5f6g7h8-i9j0-1234-5678-90abcdef1234"
+            }
+        ],
+        "total": 1,
+        "page": 1,
+        "limit": 10,
+        "total_pages": 1
+    }
+}
+```
+
+#### GET /voucher-redemptions/:id
+Gets details of a specific voucher redemption.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):** Single redemption object (same structure as in list)
+
+#### GET /voucher-redemptions/voucher/:voucher_id
+Gets all redemptions for a specific voucher.
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Query Parameters**: Same as GET /voucher-redemptions/me
+- **Response (200 OK):** Same structure as GET /voucher-redemptions/me
+
+#### PATCH /voucher-redemptions/:id
+Updates a voucher redemption (typically for admin purposes).
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Request Body**:
+```json
+{
+    "status": "CANCELLED",
+    "notes": "Cancelled due to system error"
+}
+```
+- **Response (200 OK):** Updated redemption object
+
+#### DELETE /voucher-redemptions/:id
+Deletes a voucher redemption (typically for admin purposes).
+- **Middleware**: `AuthConnect`, `AuthAccount`
+- **Response (200 OK):**
+```json
+{
+    "success": true,
+    "data": null
+}
+```
+
+---
 
 ### API Key Management
 
@@ -456,3 +649,43 @@ The API supports two authentication methods:
    ```
    X-API-Key: gsalt_prod_1234567890abcdef
    ```
+
+#### GET /transactions/payment-methods
+Gets a list of available payment methods with their fees and configurations.
+- **Middleware**: `AuthConnect`, `AuthAccount` (Requires valid Connect token and active GSALT account)
+- **Query Parameters**: 
+  - `currency` (optional): Filter by currency (e.g., "IDR", "GSALT")
+  - `is_active` (optional): Filter by active status (true/false)
+  - `is_available_for_topup` (optional): Filter methods available for top-up (true/false)
+  - `is_available_for_withdrawal` (optional): Filter methods available for withdrawal (true/false)
+- **Response (200 OK):**
+```json
+{
+    "success": true,{"success":false,"message":"Invalid transaction ID format","data":null}
+    "data": [
+        {
+            "id": "c2a9b3a1-5c9e-4b7e-8c6f-3b4a2e1d0c5a",
+            "name": "QRIS Payment",
+            "code": "QRIS",
+            "currency": "IDR",
+            "method_type": "QRIS",
+            "provider_code": "FLIP",
+            "payment_fee_flat": 1000,
+            "payment_fee_percent": "0.70",
+            "withdrawal_fee_flat": 0,
+            "withdrawal_fee_percent": "0.00",
+            "is_active": true,
+            "is_available_for_topup": true,
+            "is_available_for_withdrawal": false,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }
+    ]
+}
+```
+- **Error Responses:**
+  - `401 Unauthorized`: Missing or invalid Connect token
+  - `403 Forbidden`: No active GSALT account found
+  - `400 Bad Request`: Invalid query parameters
+
+---

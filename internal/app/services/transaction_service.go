@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +46,7 @@ type TransactionService struct {
 	flipService          *FlipService
 	connectService       *ConnectService
 	paymentMethodService *PaymentMethodService
+	paymentService       *PaymentService
 	auditService         *AuditService
 	limits               TransactionLimits
 }
@@ -57,6 +58,7 @@ func NewTransactionService(
 	flipService *FlipService,
 	connectService *ConnectService,
 	paymentMethodService *PaymentMethodService,
+	paymentService *PaymentService,
 	auditService *AuditService,
 ) *TransactionService {
 	return &TransactionService{
@@ -66,6 +68,7 @@ func NewTransactionService(
 		flipService:          flipService,
 		connectService:       connectService,
 		paymentMethodService: paymentMethodService,
+		paymentService:       paymentService,
 		auditService:         auditService,
 		limits:               defaultLimits,
 	}
@@ -174,7 +177,7 @@ func (s *TransactionService) CreateTransaction(req *models.TransactionCreateRequ
 		FeeGsaltUnits:         0,
 		TotalAmountGsaltUnits: req.AmountGsaltUnits,
 		Currency:              req.Currency,
-		ExchangeRateIDR:       req.ExchangeRateIDR,
+		ExchangeRateIDR:       decimal.Zero,
 		PaymentAmount:         req.PaymentAmount,
 		PaymentCurrency:       req.PaymentCurrency,
 		PaymentMethod:         req.PaymentMethod,
@@ -185,7 +188,10 @@ func (s *TransactionService) CreateTransaction(req *models.TransactionCreateRequ
 		DestinationAccountID:  destinationAccountUUID,
 		VoucherCode:           req.VoucherCode,
 		ExternalReferenceID:   req.ExternalReferenceID,
-		PaymentInstructions:   req.PaymentInstructions,
+	}
+
+	if req.ExchangeRateIDR != nil {
+		transaction.ExchangeRateIDR = *req.ExchangeRateIDR
 	}
 
 	if err := s.db.Create(transaction).Error; err != nil {
@@ -223,14 +229,12 @@ func (s *TransactionService) GetTransactionByRef(ref string) (*models.Transactio
 		return nil, errors.NewInternalServerError(err, "Failed to get transaction")
 	}
 
-	paymentInstructions, _ := transaction.GetPaymentInstructions()
-
 	return &models.TransactionResponse{
-		Transaction:         &transaction,
-		PaymentInstructions: paymentInstructions,
+		Transaction: &transaction,
 	}, nil
 }
 
+// GetTransactionsByAccount gets transactions for an account with pagination
 func (s *TransactionService) GetTransactionsByAccount(accountId string, pagination *models.PaginationRequest) (*models.Pagination[[]models.Transaction], error) {
 	accountUUID, err := s.parseUUID(accountId, "account ID")
 	if err != nil {
@@ -287,115 +291,49 @@ func (s *TransactionService) GetTransactionsByAccount(accountId string, paginati
 }
 
 func (s *TransactionService) UpdateTransaction(transactionId string, req *models.TransactionUpdateRequest) (*models.Transaction, error) {
-	// Validate request
-	if err := s.validator.Validate(req); err != nil {
-		return nil, err
-	}
-
-	// Parse transaction ID
 	transactionUUID, err := s.parseUUID(transactionId, "transaction ID")
 	if err != nil {
 		return nil, err
 	}
 
-	// Find existing transaction
+	// Get existing transaction
 	var transaction models.Transaction
-	if err := s.db.First(&transaction, "id = ?", transactionUUID).Error; err != nil {
+	err = s.db.Where("id = ?", transactionUUID).First(&transaction).Error
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, errors.NewNotFoundError("Transaction not found")
 		}
-		return nil, errors.NewInternalServerError(err, "Failed to find transaction")
+		return nil, errors.NewInternalServerError(err, "Failed to get transaction")
 	}
 
-	// Store old state for audit
+	// Store old transaction for audit
 	oldTransaction := transaction
 
-	// Parse UUID fields if provided
-	relatedTransactionUUID, err := s.parseOptionalUUID(req.RelatedTransactionID, "related transaction ID")
-	if err != nil {
-		return nil, err
-	}
-
-	sourceAccountUUID, err := s.parseOptionalUUID(req.SourceAccountID, "source account ID")
-	if err != nil {
-		return nil, err
-	}
-
-	destinationAccountUUID, err := s.parseOptionalUUID(req.DestinationAccountID, "destination account ID")
-	if err != nil {
-		return nil, err
-	}
-
-	// Update fields - GORM will handle UpdatedAt automatically
-	updates := map[string]interface{}{}
+	// Update fields if provided
+	updates := make(map[string]interface{})
 
 	if req.Status != nil {
-		oldStatus := transaction.Status
 		updates["status"] = *req.Status
-		if *req.Status == models.TransactionStatusCompleted {
-			now := time.Now()
-			updates["completed_at"] = &now
-		}
-
-		// Log status change
-		metadata := map[string]interface{}{
-			"payment_method":           transaction.PaymentMethod,
-			"external_payment_id":      transaction.ExternalPaymentID,
-			"processing_status":        transaction.Status,
-			"amount_gsalt_units":       transaction.AmountGsaltUnits,
-			"fee_gsalt_units":          transaction.FeeGsaltUnits,
-			"total_amount_gsalt_units": transaction.TotalAmountGsaltUnits,
-		}
-
-		if err := s.auditService.LogTransactionStatusChange(
-			transaction.ID,
-			oldStatus,
-			*req.Status,
-			"Status updated via UpdateTransaction",
-			metadata,
-			nil, // TODO: Add user ID from context
-		); err != nil {
-			return nil, err
-		}
 	}
 	if req.ExchangeRateIDR != nil {
-		updates["exchange_rate_idr"] = req.ExchangeRateIDR
+		updates["exchange_rate_idr"] = *req.ExchangeRateIDR
 	}
 	if req.PaymentAmount != nil {
-		updates["payment_amount"] = req.PaymentAmount
+		updates["payment_amount"] = *req.PaymentAmount
 	}
 	if req.PaymentCurrency != nil {
-		updates["payment_currency"] = req.PaymentCurrency
+		updates["payment_currency"] = *req.PaymentCurrency
 	}
 	if req.PaymentMethod != nil {
-		updates["payment_method"] = req.PaymentMethod
-	}
-	if req.PaymentInstructions != nil {
-		updates["payment_instructions"] = req.PaymentInstructions
+		updates["payment_method"] = *req.PaymentMethod
 	}
 	if req.Description != nil {
-		updates["description"] = req.Description
-	}
-	if req.RelatedTransactionID != nil {
-		updates["related_transaction_id"] = relatedTransactionUUID
-	}
-	if req.SourceAccountID != nil {
-		updates["source_account_id"] = sourceAccountUUID
-	}
-	if req.DestinationAccountID != nil {
-		updates["destination_account_id"] = destinationAccountUUID
-	}
-	if req.VoucherCode != nil {
-		updates["voucher_code"] = req.VoucherCode
-	}
-	if req.ExternalReferenceID != nil {
-		updates["external_reference_id"] = req.ExternalReferenceID
-	}
-	if req.CompletedAt != nil {
-		updates["completed_at"] = req.CompletedAt
+		updates["description"] = *req.Description
 	}
 
-	// Apply updates
+	// Add updated_at
+	updates["updated_at"] = time.Now()
+
 	if err := s.db.Model(&transaction).Updates(updates).Error; err != nil {
 		return nil, errors.NewInternalServerError(err, "Failed to update transaction")
 	}
@@ -431,67 +369,38 @@ func (s *TransactionService) createBaseTransaction(accountUUID uuid.UUID, txnTyp
 	}
 }
 
-func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentAmount *int64, paymentCurrency *string, paymentMethodCode *string, externalRefId *string) (*models.TransactionResponse, error) {
-	// Parse UUID first
+func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int64, paymentMethodCode string, externalRefId *string) (*models.Transaction, error) {
+	// Parse account UUID
 	accountUUID, err := s.parseUUID(accountId, "account ID")
 	if err != nil {
 		return nil, err
 	}
 
-	// Validate payment method code is provided
-	if paymentMethodCode == nil || *paymentMethodCode == "" {
-		return nil, errors.NewBadRequestError("Payment method code is required")
-	}
-
-	// Get Payment Method configuration from the database
-	paymentMethod, err := s.paymentMethodService.FindByCode(*paymentMethodCode)
+	// Get payment method
+	paymentMethod, err := s.paymentMethodService.FindByCode(paymentMethodCode)
 	if err != nil {
-		return nil, err // The error from the service is already well-formatted
-	}
-
-	// Check if the method is available for top-up
-	if !paymentMethod.IsAvailableForTopup {
-		return nil, errors.NewBadRequestError(fmt.Sprintf("Payment method '%s' is not available for top-up", *paymentMethodCode))
-	}
-
-	// Validate transaction amount
-	if err := s.validateTransactionAmount(models.TransactionTypeTopup, amountGsaltUnits); err != nil {
 		return nil, err
 	}
 
-	// Check idempotency
-	if existingTxn, err := s.checkIdempotency(externalRefId); err != nil {
-		return nil, err
-	} else if existingTxn != nil {
-		paymentInstructions, _ := existingTxn.GetPaymentInstructions()
-		return &models.TransactionResponse{
-			Transaction:         existingTxn,
-			PaymentInstructions: paymentInstructions,
-		}, nil
-	}
+	// Calculate fees
+	amountIDR := s.ConvertGSALTToIDR(amountGsaltUnits)
+	feeDecimal := s.paymentMethodService.CalculateFee(*paymentMethod, decimal.NewFromInt(amountIDR))
+	feeGsaltUnits := s.ConvertIDRToGSALT(feeDecimal.IntPart())
 
-	// Check daily limits
-	if err := s.checkDailyLimits(accountUUID, models.TransactionTypeTopup, amountGsaltUnits); err != nil {
-		return nil, err
-	}
+	// Total amount including fee
+	totalAmountGsalt := amountGsaltUnits + feeGsaltUnits
+	finalPaymentAmount := s.ConvertGSALTToIDR(totalAmountGsalt)
 
-	// Auto-calculate payment_amount if not provided
-	var finalPaymentAmount int64
-	if paymentAmount != nil {
-		finalPaymentAmount = *paymentAmount
-	} else {
-		finalPaymentAmount = s.ConvertGSALTToIDR(amountGsaltUnits)
-	}
+	// Get current exchange rate
+	exchangeRate := decimal.NewFromInt(10000) // 1 GSALT = 10,000 IDR
 
 	var transaction *models.Transaction
-	exchangeRate := decimal.NewFromInt(1000) // 1 GSALT = 1000 IDR
-	ctx := context.Background()
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Create transaction record
 		description := fmt.Sprintf("Topup %d GSALT", amountGsaltUnits/100)
 		transaction = s.createBaseTransaction(accountUUID, models.TransactionTypeTopup, amountGsaltUnits, models.TransactionStatusPending, &description)
-		transaction.ExchangeRateIDR = &exchangeRate
+		transaction.ExchangeRateIDR = exchangeRate
 		transaction.PaymentAmount = &finalPaymentAmount
 		transaction.PaymentCurrency = &paymentMethod.Currency
 		transaction.PaymentMethod = &paymentMethod.Code
@@ -515,41 +424,55 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		}
 
 		internalRef := fmt.Sprintf("GSALT-%s", pkg.RandomNumberString(10))
-
-		billReq := models.CreateBillRequest{
-			Title:                 fmt.Sprintf("GSALT Topup - %s", internalRef),
-			Type:                  "SINGLE",
-			Amount:                finalPaymentAmount,
-			RedirectURL:           s.flipService.client.GetDefaultRedirectURL(),
-			IsPhoneNumberRequired: true,
-			Step:                  "3",
-			SenderName:            connectUser.FullName,
-			SenderEmail:           connectUser.Email,
-			SenderPhoneNumber:     "081234567890", // Placeholder
-			SenderBank:            paymentMethod.ProviderMethodCode,
-			SenderBankType:        paymentMethod.ProviderMethodType,
-			ReferenceID:           internalRef,
-			ChargeFee:             false, // We handle fee display, Flip doesn't need to charge the user
+		paymentReq := models.FlipPaymentRequestData{
+			TransactionID: transaction.ID.String(),
+			Title:         fmt.Sprintf("GSALT Topup - %s", transaction.ID.String()),
+			Amount:        finalPaymentAmount,
+			ExpiryHours:   24,
+			PaymentMethod: models.FlipPaymentMethod(paymentMethod.ProviderMethodCode),
+			CustomerName:  &connectUser.FullName,
+			CustomerEmail: &connectUser.Email,
+			ReferenceID:   &internalRef,
+			ChargeFee:     false,
+			ItemDetails: []models.ItemDetail{
+				{
+					Name:     "GSALT Balance",
+					Price:    amountIDR,
+					Quantity: 1,
+					Desc:     fmt.Sprintf("%d GSALT", amountGsaltUnits/100),
+				},
+				{
+					Name:     "Fee",
+					Price:    feeDecimal.IntPart(),
+					Quantity: 1,
+					Desc:     "Payment processing fee",
+				},
+			},
 		}
 
-		billResp, err := s.flipService.CreateBill(ctx, billReq)
+		// Create payment in Flip
+		paymentResp, err := s.flipService.CreatePayment(paymentReq)
 		if err != nil {
-			return fmt.Errorf("failed to create bill with provider: %w", err)
+			return errors.NewInternalServerError(err, "Failed to create payment in Flip")
 		}
 
-		instructionsJSON, err := json.Marshal(billResp)
-		if err != nil {
-			return fmt.Errorf("failed to marshal payment instructions: %w", err)
+		var providerPaymentIdString string
+		providerPaymentIdString = strconv.Itoa(paymentResp.LinkID)
+
+		// Create payment details
+		paymentDetails := &models.PaymentDetails{
+			ID:                uuid.New(),
+			TransactionID:     transaction.ID,
+			Provider:          paymentMethod.ProviderCode,
+			ProviderPaymentID: &providerPaymentIdString,
+			PaymentURL:        &paymentResp.LinkURL,
+			ExpiryTime:        paymentResp.ExpiryTime,
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
 		}
-		instructionsJSONStr := string(instructionsJSON)
 
-		transaction.ExternalReferenceID = &internalRef
-		linkIDStr := fmt.Sprintf("%d", billResp.LinkID)
-		transaction.ExternalPaymentID = &linkIDStr
-		transaction.PaymentInstructions = &instructionsJSONStr
-
-		if err := tx.Save(transaction).Error; err != nil {
-			return fmt.Errorf("failed to update transaction with payment details: %w", err)
+		if err := tx.Create(paymentDetails).Error; err != nil {
+			return errors.NewInternalServerError(err, "Failed to create payment details")
 		}
 
 		return nil
@@ -559,13 +482,7 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		return nil, err
 	}
 
-	paymentInstructions, _ := transaction.GetPaymentInstructions()
-	response := &models.TransactionResponse{
-		Transaction:         transaction,
-		PaymentInstructions: paymentInstructions,
-	}
-
-	return response, nil
+	return transaction, nil
 }
 
 // updateAccountBalance updates the account balance with the given amount
@@ -691,27 +608,19 @@ func (s *TransactionService) ProcessTransfer(sourceAccountId, destAccountId stri
 }
 
 // ProcessPayment processes external payment (QRIS, Bank Transfer, E-wallet, Credit Card, etc.)
-func (s *TransactionService) ProcessPayment(request models.PaymentRequest) (models.PaymentResponse, error) {
+func (s *TransactionService) ProcessPayment(request models.PaymentRequest) (*models.Transaction, error) {
 	// Validate request
 	if err := s.validator.Validate(request); err != nil {
-		return models.PaymentResponse{}, err
-	}
-
-	ctx := context.Background()
-
-	// Get ConnectUser directly
-	connectUser, err := s.connectService.GetUser(request.AccountID)
-	if err != nil {
-		return models.PaymentResponse{}, fmt.Errorf("connect user not found: %w", err)
+		return nil, err
 	}
 
 	// Get Payment Method configuration from DB
 	paymentMethod, err := s.paymentMethodService.FindByCode(request.PaymentMethod)
 	if err != nil {
-		return models.PaymentResponse{}, err
+		return nil, err
 	}
 	if !paymentMethod.IsAvailableForTopup { // Payments are a form of topup/funding
-		return models.PaymentResponse{}, errors.NewBadRequestError(fmt.Sprintf("Payment method '%s' is not available for payment", request.PaymentMethod))
+		return nil, errors.NewBadRequestError(fmt.Sprintf("Payment method '%s' is not available for payment", request.PaymentMethod))
 	}
 
 	amountInIDR := s.ConvertGSALTToIDR(request.AmountGsaltUnits)
@@ -725,7 +634,7 @@ func (s *TransactionService) ProcessPayment(request models.PaymentRequest) (mode
 	// Parse account UUID
 	accountUUID, err := s.parseUUID(request.AccountID, "account ID")
 	if err != nil {
-		return models.PaymentResponse{}, fmt.Errorf("invalid account ID format: %w", err)
+		return nil, fmt.Errorf("invalid account ID format: %w", err)
 	}
 
 	// Create payment transaction
@@ -737,68 +646,24 @@ func (s *TransactionService) ProcessPayment(request models.PaymentRequest) (mode
 	transaction.PaymentAmount = &totalAmountIDR
 	transaction.PaymentCurrency = &paymentMethod.Currency
 
-	if err := s.db.Create(&transaction).Error; err != nil {
-		return models.PaymentResponse{}, fmt.Errorf("failed to create transaction: %w", err)
+	if err := s.db.Create(transaction).Error; err != nil {
+		return nil, errors.NewInternalServerError(err, "Failed to create transaction")
 	}
 
-	// --- Create Bill via Provider ---
-	if paymentMethod.ProviderCode != "FLIP" {
-		return models.PaymentResponse{}, errors.NewInternalServerError(nil, "Provider not implemented")
+	// Create payment details
+	paymentDetails := &models.PaymentDetails{
+		ID:            uuid.New(),
+		TransactionID: transaction.ID,
+		Provider:      paymentMethod.ProviderCode,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
-	internalRef := *transaction.ExternalReferenceID
-	billReq := models.CreateBillRequest{
-		Title:                 fmt.Sprintf("GSALT Payment - %s", internalRef),
-		Type:                  "SINGLE",
-		Amount:                totalAmountIDR,
-		RedirectURL:           s.flipService.client.GetDefaultRedirectURL(),
-		IsPhoneNumberRequired: true,
-		Step:                  "3",
-		SenderName:            connectUser.FullName,
-		SenderEmail:           connectUser.Email,
-		SenderPhoneNumber:     "081234567890", // Placeholder
-		ReferenceID:           internalRef,
-		SenderBank:            paymentMethod.ProviderMethodCode,
-		SenderBankType:        paymentMethod.ProviderMethodType,
+	if err := s.db.Create(paymentDetails).Error; err != nil {
+		return nil, errors.NewInternalServerError(err, "Failed to create payment details")
 	}
 
-	billResp, err := s.flipService.CreateBill(ctx, billReq)
-	if err != nil {
-		s.db.Delete(&transaction) // Rollback
-		return models.PaymentResponse{}, fmt.Errorf("failed to create Flip bill: %w", err)
-	}
-
-	instructionsJSON, err := json.Marshal(billResp)
-	if err != nil {
-		s.db.Delete(&transaction) // Rollback
-		return models.PaymentResponse{}, fmt.Errorf("failed to marshal payment instructions: %w", err)
-	}
-	instructionsJSONStr := string(instructionsJSON)
-	linkIDStr := fmt.Sprintf("%d", billResp.LinkID)
-
-	transaction.ExternalPaymentID = &linkIDStr
-	transaction.PaymentInstructions = &instructionsJSONStr
-	if err := s.db.Save(&transaction).Error; err != nil {
-		return models.PaymentResponse{}, fmt.Errorf("failed to update transaction: %w", err)
-	}
-
-	// --- Construct Final Response ---
-	paymentURL := billResp.PaymentURL
-	if paymentURL == "" {
-		paymentURL = billResp.LinkURL
-	}
-
-	return models.PaymentResponse{
-		TransactionID:       transaction.ID.String(),
-		Status:              string(transaction.Status),
-		PaymentMethod:       request.PaymentMethod,
-		Amount:              request.AmountGsaltUnits,
-		Fee:                 feeGsaltUnits,
-		TotalAmount:         totalAmountGsalt,
-		PaymentURL:          paymentURL,
-		ExpiryTime:          pkg.ParseFlipExpiryTime(billResp.ExpiredDate),
-		PaymentInstructions: billResp.Instructions,
-	}, nil
+	return transaction, nil
 }
 
 // Helper function to validate transaction amounts (in GSALT units)
@@ -1189,7 +1054,7 @@ func (s *TransactionService) ProcessWithdrawal(accountId string, amountGsaltUnit
 
 		// Update transaction with disbursement ID
 		disbursementID := fmt.Sprintf("%d", disbursementResp.ID)
-		transaction.ExternalPaymentID = &disbursementID
+		transaction.PaymentDetails.ProviderPaymentID = &disbursementID
 
 		if err := tx.Save(transaction).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to update transaction with disbursement ID")
@@ -1340,9 +1205,9 @@ func (s *TransactionService) CheckWithdrawalStatus(transactionId string) (*model
 
 	// Get disbursement status from Flip if we have external payment ID
 	var disbursementStatus *models.DisbursementResponse
-	if transaction.ExternalPaymentID != nil {
+	if transaction.PaymentDetails.ProviderPaymentID != nil {
 		ctx := context.Background()
-		disbursementStatus, err = s.flipService.GetDisbursementByID(ctx, *transaction.ExternalPaymentID)
+		disbursementStatus, err = s.flipService.GetDisbursementByID(ctx, *transaction.PaymentDetails.ProviderPaymentID)
 		if err != nil {
 			// Log error but don't fail the request
 			fmt.Printf("Failed to get disbursement status: %v\n", err)
@@ -1363,7 +1228,7 @@ func (s *TransactionService) CheckWithdrawalStatus(transactionId string) (*model
 	return response, nil
 }
 
-// ConfirmPayment - Confirm payment for pending topup transactions
+// ConfirmPayment confirms a payment transaction
 func (s *TransactionService) ConfirmPayment(transactionId string, externalPaymentId *string) (*models.Transaction, error) {
 	transactionUUID, err := s.parseUUID(transactionId, "transaction ID")
 	if err != nil {
@@ -1404,7 +1269,6 @@ func (s *TransactionService) ConfirmPayment(transactionId string, externalPaymen
 		transaction.Status = models.TransactionStatusCompleted
 		transaction.CompletedAt = &now
 		if externalPaymentId != nil {
-			// You can store external payment ID in external_reference_id or create a new field
 			if transaction.ExternalReferenceID == nil {
 				transaction.ExternalReferenceID = externalPaymentId
 			}
@@ -1418,6 +1282,20 @@ func (s *TransactionService) ConfirmPayment(transactionId string, externalPaymen
 		account.Balance += transaction.AmountGsaltUnits
 		if err := tx.Save(&account).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to update account balance")
+		}
+
+		// Update payment status
+		statusUpdateReq := &models.PaymentStatusUpdateRequest{
+			Status:            models.PaymentStatusCompleted,
+			StatusDescription: pkg.StringPtr("Payment confirmed"),
+			PaymentTime:       &now,
+		}
+		if externalPaymentId != nil {
+			statusUpdateReq.ProviderPaymentID = externalPaymentId
+		}
+
+		if err := s.paymentService.UpdatePaymentStatus(context.Background(), transaction.ID, statusUpdateReq); err != nil {
+			return err
 		}
 
 		return nil
@@ -1462,6 +1340,18 @@ func (s *TransactionService) RejectPayment(transactionId string, reason *string)
 
 		if err := tx.Save(&transaction).Error; err != nil {
 			return errors.NewInternalServerError(err, "Failed to update transaction")
+		}
+
+		// Update payment status
+		now := time.Now()
+		statusUpdateReq := &models.PaymentStatusUpdateRequest{
+			Status:            models.PaymentStatusFailed,
+			StatusDescription: reason,
+			PaymentTime:       &now,
+		}
+
+		if err := s.paymentService.UpdatePaymentStatus(context.Background(), transaction.ID, statusUpdateReq); err != nil {
+			return err
 		}
 
 		return nil

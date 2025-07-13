@@ -28,41 +28,41 @@ const (
 )
 
 type Transaction struct {
-	ID                    uuid.UUID         `json:"id" db:"id"`
-	AccountID             uuid.UUID         `json:"account_id" db:"account_id"`
-	Type                  TransactionType   `json:"type" db:"type"`
-	Currency              string            `json:"currency" db:"currency"`
-	Status                TransactionStatus `json:"status" db:"status"`
-	Description           *string           `json:"description" db:"description"`
-	RelatedTransactionID  *uuid.UUID        `json:"related_transaction_id,omitempty" db:"related_transaction_id"`
-	SourceAccountID       *uuid.UUID        `json:"source_account_id,omitempty" db:"source_account_id"`
-	DestinationAccountID  *uuid.UUID        `json:"destination_account_id,omitempty" db:"destination_account_id"`
-	VoucherCode           *string           `json:"voucher_code,omitempty" db:"voucher_code"`
-	ExternalReferenceID   *string           `json:"external_reference_id,omitempty" db:"external_reference_id"`
-	AmountGsaltUnits      int64             `json:"amount_gsalt_units" db:"amount_gsalt_units"`
-	ExchangeRateIDR       decimal.Decimal   `json:"exchange_rate_idr" db:"exchange_rate_idr"`
-	PaymentAmount         *int64            `json:"payment_amount,omitempty" db:"payment_amount"`
-	PaymentCurrency       *string           `json:"payment_currency,omitempty" db:"payment_currency"`
-	PaymentMethod         *string           `json:"payment_method,omitempty" db:"payment_method"`
-	FeeGsaltUnits         int64             `json:"fee_gsalt_units" db:"fee_gsalt_units"`
-	TotalAmountGsaltUnits int64             `json:"total_amount_gsalt_units" db:"total_amount_gsalt_units"`
+	ID                    uuid.UUID         `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	AccountID             uuid.UUID         `json:"account_id" gorm:"type:uuid;not null"`
+	Type                  TransactionType   `json:"type" gorm:"type:transaction_type;not null"`
+	Currency              string            `json:"currency" gorm:"type:varchar(5);not null"`
+	Status                TransactionStatus `json:"status" gorm:"type:transaction_status;not null"`
+	Description           *string           `json:"description" gorm:"type:text"`
+	RelatedTransactionID  *uuid.UUID        `json:"related_transaction_id,omitempty" gorm:"type:uuid"`
+	SourceAccountID       *uuid.UUID        `json:"source_account_id,omitempty" gorm:"type:uuid"`
+	DestinationAccountID  *uuid.UUID        `json:"destination_account_id,omitempty" gorm:"type:uuid"`
+	VoucherCode           *string           `json:"voucher_code,omitempty" gorm:"type:varchar(50)"`
+	ExternalReferenceID   *string           `json:"external_reference_id,omitempty" gorm:"type:varchar(255)"`
+	AmountGsaltUnits      int64             `json:"amount_gsalt_units" gorm:"type:bigint;not null"`
+	ExchangeRateIDR       decimal.Decimal   `json:"exchange_rate_idr" gorm:"type:decimal(18,2);column:exchange_rate_idr"`
+	PaymentAmount         *int64            `json:"payment_amount,omitempty" gorm:"type:bigint"`
+	PaymentCurrency       *string           `json:"payment_currency,omitempty" gorm:"type:varchar(3)"`
+	PaymentMethod         *string           `json:"payment_method,omitempty" gorm:"type:varchar(50)"`
+	FeeGsaltUnits         int64             `json:"fee_gsalt_units" gorm:"type:bigint;not null"`
+	TotalAmountGsaltUnits int64             `json:"total_amount_gsalt_units" gorm:"type:bigint;not null"`
 
 	// Payment status fields
-	PaymentStatus            PaymentStatus `json:"payment_status" db:"payment_status"`
-	PaymentStatusDescription *string       `json:"payment_status_description" db:"payment_status_description"`
-	PaymentInitiatedAt       *time.Time    `json:"payment_initiated_at" db:"payment_initiated_at"`
-	PaymentCompletedAt       *time.Time    `json:"payment_completed_at" db:"payment_completed_at"`
-	PaymentFailedAt          *time.Time    `json:"payment_failed_at" db:"payment_failed_at"`
-	PaymentExpiredAt         *time.Time    `json:"payment_expired_at" db:"payment_expired_at"`
+	PaymentStatus            PaymentStatus `json:"payment_status" gorm:"type:varchar(20);default:PENDING"`
+	PaymentStatusDescription *string       `json:"payment_status_description" gorm:"type:text"`
+	PaymentInitiatedAt       *time.Time    `json:"payment_initiated_at" gorm:"type:timestamp with time zone"`
+	PaymentCompletedAt       *time.Time    `json:"payment_completed_at" gorm:"type:timestamp with time zone"`
+	PaymentFailedAt          *time.Time    `json:"payment_failed_at" gorm:"type:timestamp with time zone"`
+	PaymentExpiredAt         *time.Time    `json:"payment_expired_at" gorm:"type:timestamp with time zone"`
 
 	// Timestamps
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty" db:"completed_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"type:timestamp with time zone;autoCreateTime"`
+	UpdatedAt   time.Time  `json:"updated_at" gorm:"type:timestamp with time zone;autoUpdateTime"`
+	CompletedAt *time.Time `json:"completed_at,omitempty" gorm:"type:timestamp with time zone"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty" gorm:"type:timestamp with time zone;index"`
 
 	// Relations (not stored in DB)
-	PaymentDetails *PaymentDetails `json:"payment_details,omitempty" db:"-"`
+	PaymentDetails *PaymentDetails `json:"payment_details,omitempty" gorm:"-"`
 }
 
 // Request/Response structs

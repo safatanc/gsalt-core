@@ -117,22 +117,22 @@ func (l *RedisRateLimiter) Reset(key string) error {
 // Common rate limits
 var (
 	PublicAPILimit = Rate{
-		Requests: 30,
+		Requests: 300,
 		Window:   time.Minute,
 	}
 
 	AuthenticatedAPILimit = Rate{
-		Requests: 60,
+		Requests: 600,
 		Window:   time.Minute,
 	}
 
 	MerchantAPILimit = Rate{
-		Requests: 100,
+		Requests: 1000,
 		Window:   time.Minute,
 	}
 
 	AuthLimit = Rate{
-		Requests: 10,
+		Requests: 1000,
 		Window:   time.Minute,
 	}
 )

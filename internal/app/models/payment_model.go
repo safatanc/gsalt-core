@@ -27,24 +27,24 @@ const (
 )
 
 type PaymentDetails struct {
-	ID                   uuid.UUID       `json:"id" db:"id"`
-	TransactionID        uuid.UUID       `json:"transaction_id" db:"transaction_id"`
-	Provider             string          `json:"provider" db:"provider"`
-	ProviderPaymentID    *string         `json:"provider_payment_id" db:"provider_payment_id"`
-	PaymentURL           *string         `json:"payment_url" db:"payment_url"`
-	QRCode               *string         `json:"qr_code" db:"qr_code"`
-	VirtualAccountNumber *string         `json:"virtual_account_number" db:"virtual_account_number"`
-	VirtualAccountBank   *string         `json:"virtual_account_bank" db:"virtual_account_bank"`
-	RetailOutletCode     *string         `json:"retail_outlet_code" db:"retail_outlet_code"`
-	RetailPaymentCode    *string         `json:"retail_payment_code" db:"retail_payment_code"`
-	CardToken            *string         `json:"card_token" db:"card_token"`
-	ExpiryTime           *time.Time      `json:"expiry_time" db:"expiry_time"`
-	PaymentTime          *time.Time      `json:"payment_time" db:"payment_time"`
-	ProviderFeeAmount    *int64          `json:"provider_fee_amount" db:"provider_fee_amount"`
-	StatusHistory        json.RawMessage `json:"status_history" db:"status_history"`
-	RawProviderResponse  json.RawMessage `json:"raw_provider_response" db:"raw_provider_response"`
-	CreatedAt            time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt            time.Time       `json:"updated_at" db:"updated_at"`
+	ID                   uuid.UUID       `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	TransactionID        uuid.UUID       `json:"transaction_id" gorm:"type:uuid;not null"`
+	Provider             string          `json:"provider" gorm:"type:varchar(50);not null"`
+	ProviderPaymentID    *string         `json:"provider_payment_id" gorm:"type:varchar(255)"`
+	PaymentURL           *string         `json:"payment_url" gorm:"type:text"`
+	QRCode               *string         `json:"qr_code" gorm:"type:text"`
+	VirtualAccountNumber *string         `json:"virtual_account_number" gorm:"type:varchar(50)"`
+	VirtualAccountBank   *string         `json:"virtual_account_bank" gorm:"type:varchar(10)"`
+	RetailOutletCode     *string         `json:"retail_outlet_code" gorm:"type:varchar(10)"`
+	RetailPaymentCode    *string         `json:"retail_payment_code" gorm:"type:varchar(50)"`
+	CardToken            *string         `json:"card_token" gorm:"type:varchar(255)"`
+	ExpiryTime           *time.Time      `json:"expiry_time" gorm:"type:timestamp with time zone"`
+	PaymentTime          *time.Time      `json:"payment_time" gorm:"type:timestamp with time zone"`
+	ProviderFeeAmount    *int64          `json:"provider_fee_amount" gorm:"type:bigint"`
+	StatusHistory        json.RawMessage `json:"status_history" gorm:"type:jsonb"`
+	RawProviderResponse  json.RawMessage `json:"raw_provider_response" gorm:"type:jsonb"`
+	CreatedAt            time.Time       `json:"created_at" gorm:"type:timestamp with time zone;autoCreateTime"`
+	UpdatedAt            time.Time       `json:"updated_at" gorm:"type:timestamp with time zone;autoUpdateTime"`
 }
 
 type PaymentAccount struct {

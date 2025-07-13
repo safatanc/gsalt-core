@@ -355,7 +355,7 @@ func (s *TransactionService) UpdateTransaction(transactionId string, req *models
 
 // Helper function to create transaction with common fields
 func (s *TransactionService) createBaseTransaction(accountUUID uuid.UUID, txnType models.TransactionType, amountGsaltUnits int64, status models.TransactionStatus, description *string) *models.Transaction {
-	externalRefId := "GSALT-" + pkg.RandomNumberString(8)
+	externalRefId := "GSALT-" + pkg.RandomNumberString(5)
 	return &models.Transaction{
 		AccountID:             accountUUID,
 		ExternalReferenceID:   &externalRefId,
@@ -366,6 +366,7 @@ func (s *TransactionService) createBaseTransaction(accountUUID uuid.UUID, txnTyp
 		Currency:              "GSALT",
 		Status:                status,
 		Description:           description,
+		PaymentStatus:         models.PaymentStatusPending,
 	}
 }
 
@@ -424,16 +425,21 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		}
 
 		internalRef := fmt.Sprintf("GSALT-%s", pkg.RandomNumberString(10))
-		paymentReq := models.FlipPaymentRequestData{
-			TransactionID: transaction.ID.String(),
-			Title:         fmt.Sprintf("GSALT Topup - %s", transaction.ID.String()),
-			Amount:        finalPaymentAmount,
-			ExpiryHours:   24,
-			PaymentMethod: models.FlipPaymentMethod(paymentMethod.ProviderMethodCode),
-			CustomerName:  &connectUser.FullName,
-			CustomerEmail: &connectUser.Email,
-			ReferenceID:   &internalRef,
-			ChargeFee:     false,
+		expiredDate := time.Now().Add(time.Hour * 3)
+		billReq := models.CreateBillRequest{
+			Title:             fmt.Sprintf("GSALT Topup - %s", transaction.ID.String()),
+			Amount:            finalPaymentAmount,
+			ReferenceID:       internalRef,
+			ChargeFee:         true,
+			ExpiredDate:       expiredDate.Format("2006-01-02 15:04"),
+			SenderPhoneNumber: "081234567890",
+			Type:              "SINGLE",
+			Step:              "3",
+			SenderName:        connectUser.FullName,
+			SenderEmail:       connectUser.Email,
+			SenderBank:        paymentMethod.ProviderMethodCode,
+			SenderBankType:    paymentMethod.ProviderMethodType,
+			RedirectURL:       "https://connect.safatanc.com/gsalt/topup/success",
 			ItemDetails: []models.ItemDetail{
 				{
 					Name:     "GSALT Balance",
@@ -451,13 +457,17 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 		}
 
 		// Create payment in Flip
-		paymentResp, err := s.flipService.CreatePayment(paymentReq)
+		billResp, err := s.flipService.CreateBill(context.Background(), billReq)
 		if err != nil {
 			return errors.NewInternalServerError(err, "Failed to create payment in Flip")
 		}
 
 		var providerPaymentIdString string
-		providerPaymentIdString = strconv.Itoa(paymentResp.LinkID)
+		providerPaymentIdString = strconv.Itoa(billResp.LinkID)
+		expiryTime, err := time.Parse("2006-01-02 15:04", *billResp.ExpiredDate)
+		if err != nil {
+			return errors.NewInternalServerError(err, "Failed to parse expiry time")
+		}
 
 		// Create payment details
 		paymentDetails := &models.PaymentDetails{
@@ -465,8 +475,8 @@ func (s *TransactionService) ProcessTopup(accountId string, amountGsaltUnits int
 			TransactionID:     transaction.ID,
 			Provider:          paymentMethod.ProviderCode,
 			ProviderPaymentID: &providerPaymentIdString,
-			PaymentURL:        &paymentResp.LinkURL,
-			ExpiryTime:        paymentResp.ExpiryTime,
+			PaymentURL:        &billResp.LinkURL,
+			ExpiryTime:        &expiryTime,
 			CreatedAt:         time.Now(),
 			UpdatedAt:         time.Now(),
 		}
